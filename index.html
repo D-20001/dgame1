@@ -1045,8 +1045,78 @@
             `;
             gameContainer.appendChild(stage.portal.element);
         }
+
+            
         function updatePositions() {
             const stage = stages[currentStage];
+
+            player.width = player.baseWidth * scaleFactor;
+    player.height = player.baseHeight * scaleFactor;
+    if (player.element) {
+        player.element.style.width = `${player.width}px`;
+        player.element.style.height = `${player.height}px`;
+        player.element.style.left = `${player.x * scaleFactor}px`;
+        player.element.style.top = `${player.y * scaleFactor}px`;
+        // Scale player sub-elements (helmet, visor, suit, thrusters, arms, legs)
+        const helmet = player.element.querySelector('.helmet');
+        const visor = player.element.querySelector('.visor');
+        const suit = player.element.querySelector('.suit');
+        const thrusterLeft = player.element.querySelector('.thruster-left');
+        const thrusterRight = player.element.querySelector('.thruster-right');
+        helmet.style.width = `${22 * scaleFactor}px`;
+        helmet.style.height = `${22 * scaleFactor}px`;
+        helmet.style.left = `${9 * scaleFactor}px`;
+        visor.style.width = `${16 * scaleFactor}px`;
+        visor.style.height = `${10 * scaleFactor}px`;
+        visor.style.top = `${6 * scaleFactor}px`;
+        visor.style.left = `${12 * scaleFactor}px`;
+        suit.style.width = `${24 * scaleFactor}px`;
+        suit.style.height = `${24 * scaleFactor}px`;
+        suit.style.top = `${22 * scaleFactor}px`;
+        suit.style.left = `${8 * scaleFactor}px`;
+        thrusterLeft.style.width = `${6 * scaleFactor}px`;
+        thrusterLeft.style.height = `${10 * scaleFactor}px`;
+        thrusterLeft.style.bottom = `${-8 * scaleFactor}px`;
+        thrusterLeft.style.width = `${8 * scaleFactor}px`;
+        thrusterRight.style.width = `${6 * scaleFactor}px`;
+        thrusterRight.style.height = `${10 * scaleFactor}px`;
+        thrusterRight.style.bottom = `${-8 * scaleFactor}px`;
+        thrusterRight.style.right = `${8 * scaleFactor}px`;
+    }
+
+    // Obstacle Scaling
+    stage.staticObstacles.forEach(obstacle => {
+        if (obstacle.element) {
+            obstacle.width = obstacle.baseWidth * scaleFactor;
+            obstacle.height = obstacle.baseHeight * scaleFactor;
+            obstacle.element.style.width = `${obstacle.width}px`;
+            obstacle.element.style.height = `${obstacle.height}px`;
+            obstacle.element.style.left = `${obstacle.x * scaleFactor}px`;
+            obstacle.element.style.top = `${obstacle.y * scaleFactor}px`;
+            // Scale obstacle crystals
+            const crystals = obstacle.element.querySelectorAll('.crystal');
+            crystals[0].style.width = `${10 * scaleFactor}px`;
+            crystals[0].style.height = `${18 * scaleFactor}px`;
+            crystals[0].style.left = `${10 * scaleFactor}px`;
+            crystals[0].style.top = `${0}px`;
+            crystals[1].style.width = `${10 * scaleFactor}px`;
+            crystals[1].style.height = `${15 * scaleFactor}px`;
+            crystals[1].style.left = `${2 * scaleFactor}px`;
+            crystals[1].style.top = `${2 * scaleFactor}px`;
+            crystals[2].style.width = `${10 * scaleFactor}px`;
+            crystals[2].style.height = `${15 * scaleFactor}px`;
+            crystals[2].style.left = `${18 * scaleFactor}px`;
+            crystals[2].style.top = `${2 * scaleFactor}px`;
+            crystals[3].style.width = `${10 * scaleFactor}px`;
+            crystals[3].style.height = `${12 * scaleFactor}px`;
+            crystals[3].style.left = `${6 * scaleFactor}px`;
+            crystals[3].style.top = `${8 * scaleFactor}px`;
+            crystals[4].style.width = `${10 * scaleFactor}px`;
+            crystals[4].style.height = `${12 * scaleFactor}px`;
+            crystals[4].style.left = `${14 * scaleFactor}px`;
+            crystals[4].style.top = `${8 * scaleFactor}px`;
+        }
+    });  
             clouds.forEach(cloud => {
                 if (cloud.element) {
                     cloud.element.style.left = `${cloud.x * scaleFactor}px`;
