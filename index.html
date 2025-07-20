@@ -55,7 +55,7 @@
             height: 100vh;
             justify-content: center;
             overflow: hidden;
-            touch-action: manipulation; /* Prevent double-tap zoom */
+            touch-action: manipulation;
         }
         #homeScreen, #gameOverScreen, #congratsScreen, #passwordScreen {
             text-align: center;
@@ -65,7 +65,7 @@
             border-radius: 10px;
             max-width: 90%;
             margin: 10px;
-            font-size: clamp(12px, 3vw, 14px); /* Responsive font size */
+            font-size: clamp(12px, 3vw, 14px);
         }
         #homeScreen h1, #gameOverScreen h1, #congratsScreen h1, #passwordScreen h1 {
             font-size: clamp(24px, 5vw, 28px);
@@ -87,7 +87,7 @@
             width: 100%;
             max-width: 800px;
             height: auto;
-            aspect-ratio: 4 / 3; /* Maintain 800x600 ratio */
+            aspect-ratio: 4 / 3;
         }
         #ui {
             position: absolute;
@@ -117,7 +117,7 @@
             cursor: pointer;
             touch-action: manipulation;
             min-width: 60px;
-            min-height: 48px; /* Accessible touch target */
+            min-height: 48px;
         }
         button:hover, button:active {
             background: #FFD700;
@@ -232,7 +232,7 @@
 <body>
     <div id="homeScreen">
         <h1>Pixel Platformer</h1>
-        <p>Collect all coins to unlock the portal and win to see your ranking! Avoid the ground and spikes to not reset!</p>
+        <p>Collect all coins to unlock the portal Validation of the artifact succeeded! and complete all 3 stages to win and see your ranking! Avoid the ground and spikes to not reset!</p>
         <p><strong>Controls:</strong> A/Left or D/Right: Move | W/Space: Jump (Double Jump) | S: Downward Dash</p>
         <p><strong>On Mobile:</strong> Use on-screen buttons for movement, jump, and dash.</p>
         <p><strong>Power-Ups:</strong></p>
@@ -247,7 +247,7 @@
         <canvas id="gameCanvas" width="800" height="600"></canvas>
         <div id="ui">
             <div id="timer">Time: 0.00s</div>
-            <div id="stage">Stage: 1/1</div>
+            <div id="stage">Stage: 1/3</div>
             <button id="quitButton">Quit Game</button>
         </div>
         <div id="touchControls" class="hidden">
@@ -336,23 +336,61 @@
         let hasWon = false;
         let powerUpSpawnTimer = 0;
 
-        const stages = [{
-            platforms: [
-                { x: 0, y: 550, width: 200, height: 50 },
-                { x: 300, y: 400, width: 200, height: 50 },
-                { x: 600, y: 350, width: 200, height: 50 }
-            ],
-            coins: [
-                { x: 100, y: 500, width: 16, height: 16, collected: false },
-                { x: 350, y: 350, width: 16, height: 16, collected: false },
-                { x: 650, y: 300, width: 16, height: 16, collected: false }
-            ],
-            staticObstacles: [
-                { x: 250, y: 400, width: 50, height: 50 }
-            ],
-            powerUps: [],
-            portal: { x: 700, y: 200, width: 50, height: 50, active: false }
-        }];
+        const stages = [
+            { // Stage 1: Introduction
+                platforms: [
+                    { x: 0, y: 550, width: 200, height: 50 },
+                    { x: 300, y: 400, width: 200, height: 50 },
+                    { x: 600, y: 350, width: 200, height: 50 }
+                ],
+                coins: [
+                    { x: 100, y: 500, width: 16, height: 16, collected: false },
+                    { x: 350, y: 350, width: 16, height: 16, collected: false },
+                    { x: 650, y: 300, width: 16, height: 16, collected: false }
+                ],
+                staticObstacles: [
+                    { x: 250, y: 400, width: 50, height: 50 }
+                ],
+                powerUps: [],
+                portal: { x: 700, y: 200, width: 50, height: 50, active: false }
+            },
+            { // Stage 2: Intermediate
+                platforms: [
+                    { x: 0, y: 550, width: 150, height: 50 },
+                    { x: 200, y: 450, width: 150, height: 50 },
+                    { x: 400, y: 350, width: 150, height: 50 },
+                    { x: 600, y: 450, width: 200, height: 50 }
+                ],
+                coins: [
+                    { x: 75, y: 500, width: 16, height: 16, collected: false },
+                    { x: 250, y: 300, width: 16, height: 16, collected: false },
+                    { x: 650, y: 400, width: 16, height: 16, collected: false }
+                ],
+                staticObstacles: [
+                    { x: 350, y: 350, width: 50, height: 50 }
+                ],
+                powerUps: [],
+                portal: { x: 700, y: 400, width: 50, height: 50, active: false }
+            },
+            { // Stage 3: Challenging
+                platforms: [
+                    { x: 0, y: 550, width: 100, height: 50 },
+                    { x: 250, y: 400, width: 100, height: 50 },
+                    { x: 500, y: 300, width: 100, height: 50 },
+                    { x: 700, y: 250, width: 100, height: 50 }
+                ],
+                coins: [
+                    { x: 50, y: 500, width: 16, height: 16, collected: false },
+                    { x: 300, y: 300, width: 16, height: 16, collected: false },
+                    { x: 550, y: 250, width: 16, height: 16, collected: false }
+                ],
+                staticObstacles: [
+                    { x: 300, y: 400, width: 50, height: 50 }
+                ],
+                powerUps: [],
+                portal: { x: 750, y: 200, width: 50, height: 50, active: false }
+            }
+        ];
 
         for (let i = 0; i < 8; i++) {
             clouds.push({
@@ -513,8 +551,8 @@
             player.frameCounter = 0;
             backgroundOffset = 0;
             powerUpSpawnTimer = 0;
-            stageDisplay.textContent = `Stage: 1/1`;
-            console.log('Stage reset: powerUps:', stages[currentStage].powerUps);
+            stageDisplay.textContent = `Stage: ${currentStage + 1}/3`;
+            console.log(`Stage ${currentStage + 1} reset: powerUps:`, stages[currentStage].powerUps);
         }
 
         function resetGame() {
@@ -554,7 +592,7 @@
             timerDisplay.textContent = `Time: 0.00s`;
             isGameRunning = true;
             touchControls.classList.remove('hidden');
-            console.log('Game reset: player.x:', player.x, 'player.y:', player.y, 'gameTimer:', gameTimer, 'keys:', keys, 'justReset:', justReset, 'isGameRunning:', isGameRunning);
+            console.log('Game reset: player.x:', player.x, 'player.y:', player.y, 'gameTimer:', gameTimer, 'currentStage:', currentStage, 'isGameRunning:', isGameRunning);
         }
 
         function sanitizeInput(str) {
@@ -718,7 +756,7 @@
                         showScreen(gameOverScreen);
                         displayLeaderboard(document.getElementById('leaderboard'), scoreTime);
                     }
-                    console.log('Game Over: Stage Completed, showing congrats or game over screen');
+                    console.log('Game Over: All Stages Completed, showing congrats or game over screen');
                 } catch (e) {
                     console.error('Failed to process game over:', e);
                     rankingMessage.textContent = 'Error processing score.';
@@ -940,7 +978,7 @@
             gameTimer = Number.isFinite(gameTimer) ? gameTimer + deltaTime : 0;
             timerDisplay.textContent = `Time: ${gameTimer.toFixed(2)}s`;
             animationFrame++;
-            console.log('Update: gameTimer:', gameTimer, 'player.x:', player.x, 'player.y:', player.y, 'justReset:', justReset);
+            console.log('Update: gameTimer:', gameTimer, 'player.x:', player.x, 'player.y:', player.y, 'currentStage:', currentStage, 'justReset:', justReset);
 
             if (justReset) {
                 console.log('First update after reset, skipping death checks: player.x:', player.x, 'player.y:', player.y);
@@ -1071,7 +1109,7 @@
             if (!player.invincibilityActive) {
                 for (let obstacle of stages[currentStage].staticObstacles) {
                     if (checkCollision(player, obstacle)) {
-                        console.log('Died at spike (x: 250, y: 400)');
+                        console.log(`Died at spike (x: ${obstacle.x}, y: ${obstacle.y})`);
                         player.x = obstacle.x;
                         player.y = obstacle.y - player.height;
                         gameOver(false);
@@ -1084,11 +1122,12 @@
             if (checkCollision(player, portal) && portal.active) {
                 currentStage++;
                 if (currentStage >= stages.length) {
-                    console.log('Game Over: Stage Completed, showing congrats screen');
+                    console.log('Game Over: All Stages Completed, showing congrats screen');
                     gameOver(true);
                     return;
                 }
                 resetStage();
+                console.log(`Advanced to Stage ${currentStage + 1}`);
             }
 
             coinParticles = coinParticles.filter(p => p.life > 0);
@@ -1465,9 +1504,12 @@
                 ctx.moveTo(lockX - 5, lockY - 15);
                 ctx.lineTo(lockX - 5, lockY - 25);
                 ctx.quadraticCurveTo(lockX, lockY - 30, lockX + 5, lockY - 25);
+                const lockGradient2 = ctx.createLinearGradient(lockX - 5, lockY - 25, lockX + 5, lockY - 15);
+                lockGradient2.addColorStop(0, '#FFD700');
+                lockGradient2.addColorStop(1, '#FFA500');
                 ctx.lineTo(lockX + 5, lockY - 15);
                 ctx.lineWidth = 4;
-                ctx.strokeStyle = lockGradient;
+                ctx.strokeStyle = lockGradient2;
                 ctx.stroke();
                 ctx.strokeStyle = '#000';
                 ctx.lineWidth = 1;
