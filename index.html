@@ -650,12 +650,6 @@
             console.log('Leaderboard displayed:', leaderboard);
         }
 
-        function showPasswordScreen() {
-            passwordInput.value = '';
-            showScreen(passwordScreen);
-            console.log('Showing password screen');
-        }
-
         function clearLeaderboard() {
             try {
                 const password = passwordInput.value;
@@ -786,6 +780,12 @@
             });
             requestAnimationFrame(gameLoop);
         });
+
+        function showPasswordScreen() {
+            passwordInput.value = '';
+            showScreen(passwordScreen);
+            console.log('Showing password screen');
+        }
 
         quitButton.addEventListener('click', () => {
             console.log('Quit Game clicked');
