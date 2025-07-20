@@ -1,1589 +1,1510 @@
-<!DOCTYPE html>
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Enhanced Platformer Game</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <title>Pixel Platformer</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            touch-action: manipulation;
-        }
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
         body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             background: linear-gradient(to bottom, #4B0082, #87CEEB);
-            font-family: 'VT323', monospace;
-            color: #FFD700;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            font-family: 'Press Start 2P', cursive;
+            margin: 0;
             height: 100vh;
-            overflow: hidden;
             justify-content: center;
-        }
-        #gameContainer {
-            position: relative;
-            width: 70vw;
-            height: 70vh;
-            border: 2px solid #333;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
             overflow: hidden;
+            touch-action: manipulation; /* Prevent double-tap zoom */
         }
-        #background {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(to bottom, #2A004F, #5DADE2);
-            z-index: 0;
-        }
-        #score, #stage, #homeScreen, #gameOverScreen, #leaderboard, #pauseScreen {
-            font-size: 2.4vw;
-            color: #FFD700;
-            text-shadow: 2px 2px rgba(0,0,0,1);
+        #homeScreen, #gameOverScreen, #congratsScreen, #passwordScreen {
             text-align: center;
-            width: 90%;
-            z-index: 2;
-        }
-        #score {
-            position: absolute;
-            top: 1vh;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-        #stage {
-            position: absolute;
-            top: 4.5vh;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-        #homeScreen, #gameOverScreen, #pauseScreen {
-            width: calc(80vw - 6vw);
-            height: calc(50vh - 3vh);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 3vh;
-            background: rgba(0,0,0,0.7);
-            padding: 3vh 2vh;
+            color: #FFD700;
+            text-shadow: 2px 2px 4px #000;
+            padding: 20px;
             border-radius: 10px;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 2;
+            max-width: 90%;
+            margin: 10px;
+            font-size: clamp(12px, 3vw, 14px); /* Responsive font size */
         }
-        #homeScreen h1 {
-            font-size: 4vw;
-            margin-bottom: 2vh;
+        #homeScreen h1, #gameOverScreen h1, #congratsScreen h1, #passwordScreen h1 {
+            font-size: clamp(24px, 5vw, 28px);
+            margin: 10px 0;
         }
-        #homeScreen .leaderboard-container, #gameOverScreen .leaderboard-container {
-            width: 90%;
-            height: 30vh;
-            max-height: 50vh;
-            margin-bottom: 1.5vh;
-            padding: 12px;
-            background: rgba(0,0,0,0.5);
-            border-radius: 8px;
-            overflow-y: auto;
+        #homeScreen p, #gameOverScreen p, #congratsScreen p, #passwordScreen p {
+            font-size: clamp(12px, 3vw, 14px);
+            margin: 8px 0;
         }
-        #homeScreen .powerup-guide {
-            width: 90%;
-            padding: 12px;
-            background: rgba(0,0,0,0.5);
-            border-radius: 8px;
-            font-size: 2vw;
-        }
-        #leaderboard, #leaderboardGameOver {
+        #gameScreen {
+            position: relative;
             width: 100%;
-            padding: 12px;
+            max-width: 800px;
         }
-        #leaderboard h2, #leaderboardGameOver h2 {
-            font-size: 3vw;
-            margin-bottom: 2vh;
+        #gameCanvas {
+            border: 4px solid #FFD700;
+            box-shadow: 0 0 15px #FFD700;
+            background: transparent;
+            width: 100%;
+            max-width: 800px;
+            height: auto;
+            aspect-ratio: 4 / 3; /* Maintain 800x600 ratio */
+        }
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            color: #FFD700;
+            text-shadow: 1px 1px 2px #000;
+            font-size: clamp(14px, 3vw, 16px);
+        }
+        #timer, #stage {
+            font-size: clamp(14px, 3vw, 16px);
+            font-weight: bold;
         }
         button {
-            font-family: 'VT323', monospace;
-            font-size: 2.4vw;
-            padding: 14px 16px;
-            margin-bottom: 0.8vw;
+            font-family: 'Press Start 2P', cursive;
+            font-size: clamp(14px, 3vw, 16px);
+            padding: 10px 20px;
+            margin: 8px;
             background: #4682B4;
-            color: #ffffff;
+            color: #FFD700;
             border: 2px solid #FFD700;
-            cursor: pointer;
             border-radius: 5px;
+            cursor: pointer;
+            touch-action: manipulation;
+            min-width: 60px;
+            min-height: 48px; /* Accessible touch target */
         }
-        button:hover {
+        button:hover, button:active {
             background: #FFD700;
             color: #4682B4;
         }
-        #pauseButton {
-            width: 70px;
-            height: 40px;
-            position: fixed;
-            top: 0.5vh;
-            right: 0.5vw;
-            font-size: 2.2vw;
-            background: #ffffff;
-            z-index: 2;
+        #clearLeaderboardButton {
+            background: #FF4040;
         }
-        input {
-            font-family: 'VT323', monospace;
-            font-size: 2.2vw;
-            width: 320px;
-            height: 30px;
-            margin-bottom: 0.5vh;
-            padding: 6px;
-            background: #fff;
-            border: none;
+        #clearLeaderboardButton:hover, #clearLeaderboardButton:active {
+            background: #FFD700;
+            color: #FF4040;
         }
-        #leaderboard table, #leaderboardGameOver table {
-            width: 100%;
+        #leaderboard {
+            margin: 15px 0;
+            font-size: clamp(12px, 3vw, 14px);
+        }
+        #leaderboard table {
             border-collapse: collapse;
+            margin: 0 auto;
+            color: #FFD700;
+            background: rgba(0, 0, 0, 0.5);
         }
-        #leaderboard th, #leaderboard td, #leaderboardGameOver th, #leaderboardGameOver td {
+        #leaderboard th, #leaderboard td {
+            padding: 8px 12px;
             border: 1px solid #FFD700;
-            padding: 10px 16px;
-            font-size: 2.2vw;
         }
-        #controls {
-            position: fixed;
-            bottom: 1vh;
-            width: 100%;
-            display: flex;
-            justify-content: space-between;
-            z-index: 10;
+        #leaderboard th {
+            background: #4682B4;
         }
-        .control-button {
-            background: rgba(70,130,180,0.7);
+        .player-score {
+            font-weight: bold;
+            background: rgba(255, 215, 0, 0.3);
+        }
+        .hidden {
+            display: none;
+        }
+        #quitButton {
+            position: absolute;
+            top: 40px;
+            right: 10px;
+            background: #FF4040;
             color: #FFD700;
             border: 2px solid #FFD700;
-            border-radius: 50%;
-            width: 12vw;
-            height: 12vw;
-            font-size: 4vw;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
+            min-width: 60px;
+            min-height: 48px;
         }
-        .control-button:active {
-            background: rgba(255,255,255,0.7);
+        #quitButton:hover, #quitButton:active {
+            background: #FFD700;
+            color: #FF4040;
         }
-        .player {
-            position: absolute;
-            z-index: 5;
-            transition: transform 0.05s ease;
-        }
-        .platform {
-            position: absolute;
-            z-index: 5;
-            background: linear-gradient(#4A3721, #5C4033);
-            border-top: 5px solid #228B22;
-            border: 2px solid #2F4F4F;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-        }
-        .coin {
-            position: absolute;
-            z-index: 5;
-            background: radial-gradient(circle, #FFD700 40%, #FFA500 80%);
-            border: 2px solid #DAA520;
-            border-radius: 50%;
-            box-shadow: 0 0 10px #FFD700;
-            animation: coinSpin 2s infinite linear, coinPulse 1.5s infinite ease-in-out;
-        }
-        .obstacle {
-            position: absolute;
-            z-index: 5;
-            background: #2F2F2F;
-            border: 2px solid #4F4F4F;
-            border-radius: 4px;
-            animation: spikeShake 0.1s infinite ease-in-out;
-        }
-        .powerUp {
-            position: absolute;
-            z-index: 5;
-            border: 2px solid;
-            animation: powerUpGlow 0.8s infinite ease-in-out;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            color: #FFD700;
-            text-shadow: 0 0 5px #000;
-        }
-        .portal {
-            position: absolute;
-            z-index: 5;
-            background: conic-gradient(#1E90FF, #FFD700, #FF00FF, #1E90FF);
-            border: 4px solid #FFD700;
-            border-radius: 50%;
-            animation: portalSwirl 1.5s infinite linear;
-        }
-        .cloud-container {
-            position: absolute;
-            z-index: 2;
-        }
-        .cloud-part {
-            position: absolute;
-            background: radial-gradient(circle, rgba(255,255,255,0.95) 50%, rgba(255,255,255,0.6));
-            border-radius: 40% 60% 50% 50% / 30% 40% 60% 70%;
-            box-shadow: 0 0 20px rgba(255,255,255,0.7), inset 0 0 10px rgba(255,255,255,0.5);
-            animation: cloudFloat 4s infinite ease-in-out;
-        }
-        .cloud-part::before {
-            content: '';
-            position: absolute;
-            top: -20%;
-            left: 10%;
+        #nameInput, #passwordInput {
+            font-family: 'Press Start 2P', cursive;
+            font-size: clamp(14px, 3vw, 16px);
+            padding: 10px;
+            margin: 8px;
             width: 80%;
-            height: 60%;
-            background: radial-gradient(circle, rgba(255,255,255,0.8) 50%, transparent);
-            border-radius: 50% 60% 40% 50%;
-            opacity: 0.7;
+            max-width: 250px;
+            background: #FFF;
+            color: #000;
+            border: 2px solid #FFD700;
+            border-radius: 5px;
         }
-        .cloud-part::after {
-            content: '';
-            position: absolute;
-            bottom: -20%;
-            right: 10%;
-            width: 70%;
-            height: 50%;
-            background: radial-gradient(circle, rgba(255,255,255,0.8) 50%, transparent);
-            border-radius: 60% 50% 50% 40%;
-            opacity: 0.7;
+        #nameInput:focus, #passwordInput:focus {
+            outline: none;
+            border-color: #4682B4;
         }
-        .ground-layer {
-            width: 100%;
-            position: absolute;
-            z-index: 3;
-            background: linear-gradient(#2F4F4F, #3C4F4F);
+        #touchControls {
+            position: fixed;
+            bottom: 10px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 10px;
+            z-index: 1000;
         }
-        .coin-particle {
-            position: absolute;
-            border-radius: 50%;
-            z-index: 4;
-            background: radial-gradient(circle, rgba(255,215,0,0.8), rgba(255,165,0,0));
-        }
-        .portal-particle {
-            position: absolute;
-            border-radius: 50%;
-            z-index: 4;
-            background: radial-gradient(circle, rgba(255,215,0,0.6), rgba(128,0,128,0));
-        }
-        .powerup-particle {
-            position: absolute;
-            border-radius: 50%;
-            z-index: 4;
-            background: radial-gradient(circle, rgba(255,255,255,0.8), rgba(255,255,255,0));
-        }
-        .player .helmet {
-            background: linear-gradient(45deg, #B0C4DE, #D3D3D3);
-            border: 1px solid #4682B4;
-            border-radius: 50%;
-            position: absolute;
-            top: 0;
-        }
-        .player .visor {
-            background: linear-gradient(#191970, #000080);
-            border: 1px solid #00B7EB;
-            border-radius: 8px;
-            position: absolute;
-        }
-        .player .suit {
-            background: linear-gradient(#4682B4, #5F9EA0);
-            border: 1px solid #2F4F4F;
-            border-radius: 6px;
-            position: absolute;
-        }
-        .player .thruster-left {
-            background: radial-gradient(circle, #FF4500 20%, #FFA500);
-            border-radius: 3px;
-            position: absolute;
-        }
-        .player .thruster-right {
-            background: radial-gradient(circle, #FF4500 20%, #FFA500);
-            border-radius: 3px;
-            position: absolute;
-        }
-        .player .arm-left, .player .arm-right {
-            background: linear-gradient(#4682B4, #5F9EA0);
-            border: 1px solid #2F4F4F;
-            border-radius: 4px;
-            position: absolute;
-        }
-        .player .leg-left, .player .leg-right {
-            background: linear-gradient(#2F4F4F, #4A4A4A);
-            border: 1px solid #000;
-            border-radius: 4px;
-            position: absolute;
-        }
-        .obstacle .crystal {
-            background: linear-gradient(45deg, #B22222, #FF4500);
-            border: 2px solid #8B0000;
-            position: absolute;
-            animation: crystalPulse 0.8s infinite ease-in-out, crystalRotate 8s infinite linear;
-            box-shadow: 0 0 10px #FF4500;
-        }
-        .obstacle .crystal:nth-child(1) { top: 0; left: 4px; width: 10px; height: 18px; }
-        .obstacle .crystal:nth-child(2) { top: 2px; left: 2px; width: 10px; height: 15px; transform: rotate(30deg); }
-        .obstacle .crystal:nth-child(3) { top: 2px; left: 8px; width: 10px; height: 15px; transform: rotate(-30deg); border: 2px solid #000; }
-        .obstacle .crystal:nth-child(4) { top: 8px; left: 6px; width: 10px; height: 12px; transform: rotate(15deg); }
-        .obstacle .crystal:nth-child(5) { top: 8px; left: 14px; width: 10px; height: 12px; transform: rotate(-15deg); }
-        .portal.active {
-            box-shadow: 0 0 30px rgba(255,215,0,0.8);
-            animation: portalSwirl 1.5s infinite linear, portalPulse 1s infinite ease-in-out;
-        }
-        .portal .particle1 {
-            position: absolute;
-            background: rgba(255,255,255,0.4);
-            border-radius: 4px;
-            top: 50%;
-            left: 50%;
-            transform-origin: left center;
+        .touch-button {
             width: 60px;
-            height: 6px;
-            transform: translate(-50%, -50%) rotate(45deg);
-            animation: swirlParticle 1.5s infinite linear;
-        }
-        .portal .particle2 {
-            position: absolute;
-            background: rgba(255,255,255,0.4);
-            border-radius: 4px;
-            top: 50%;
-            left: 50%;
-            transform-origin: left center;
-            width: 65px;
-            height: 8px;
-            transform: translate(-50%, -50%) rotate(0deg);
-            animation: swirlParticle 1.2s infinite linear reverse;
-        }
-        .portal .particle3 {
-            position: absolute;
-            background: rgba(255,215,0,0.5);
-            border-radius: 50%;
-            top: 50%;
-            left: 50%;
-            width: 10px;
-            height: 10px;
-            transform: translate(-50%, -50%);
-            animation: portalParticlePulse 2s infinite ease-in-out;
-        }
-        .portal.locked {
-            background: radial-gradient(circle, rgba(0,0,0,0.5), rgba(0,0,0,0.5)), conic-gradient(#1E90FF, #FFD700, #FF00FF, #1E90FF);
-        }
-        .portal .lock-icon {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 24px;
+            height: 60px;
+            background: rgba(70, 130, 180, 0.8);
             color: #FFD700;
-            text-shadow: 0 0 5px #000;
+            border: 2px solid #FFD700;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            user-select: none;
+            touch-action: manipulation;
         }
-        .ground-layer.front {
-            background: linear-gradient(#4682B4, #5A9BD4);
+        .touch-button:active {
+            background: rgba(255, 215, 0, 0.8);
         }
-        .player .thruster-left.active, .player .thruster-right.active {
-            animation: thrusterGlow 0.3s infinite ease-in-out;
+        .touch-button-group {
+            display: flex;
+            gap: 10px;
         }
-        @keyframes thrusterGlow {
-            0% { transform: scaleY(1); box-shadow: 0 0 5px #FF4500; }
-            50% { transform: scaleY(1.5); box-shadow: 0 0 10px #FF4500; }
-            100% { transform: scaleY(1); box-shadow: 0 0 5px #FF4500; }
-        }
-        @keyframes coinSpin {
-            from { transform: rotateY(0deg); }
-            to { transform: rotateY(360deg); }
-        }
-        @keyframes coinPulse {
-            0% { box-shadow: 0 0 10px #FFD700; }
-            50% { box-shadow: 0 0 15px #FFD700; }
-            100% { box-shadow: 0 0 10px #FFD700; }
-        }
-        @keyframes crystalPulse {
-            0% { box-shadow: 0 0 5px #FF4500; transform: scale(1); }
-            50% { box-shadow: 0 0 15px #FF4500; transform: scale(1.1); }
-            100% { box-shadow: 0 0 5px #FF4500; transform: scale(1); }
-        }
-        @keyframes crystalRotate {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-        @keyframes powerUpGlow {
-            0% { transform: scale(1); box-shadow: 0 0 10px currentColor; }
-            50% { transform: scale(1.2); box-shadow: 0 0 20px currentColor; }
-            100% { transform: scale(1); box-shadow: 0 0 10px currentColor; }
-        }
-        @keyframes portalSwirl {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-        @keyframes portalPulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-            100% { transform: scale(1); }
-        }
-        @keyframes portalParticlePulse {
-            0% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
-            50% { transform: translate(-50%, -50%) scale(1.5); opacity: 1; }
-            100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
-        }
-        @keyframes swirlParticle {
-            from { transform: translate(-50%, -50%) rotate(0deg); }
-            to { transform: translate(-50%, -50%) rotate(360deg); }
-        }
-        @keyframes cloudFloat {
-            0% { transform: translateY(0) scale(1); }
-            50% { transform: translateY(-5px) scale(1.02); }
-            100% { transform: translateY(0) scale(1); }
-        }
-        @keyframes spikeShake {
-            0% { transform: translateX(0); }
-            50% { transform: translateX(2px); }
-            100% { transform: translateX(0); }
-        }
-        @media screen and (max-width: 600px) {
-            #score, #stage, #homeScreen, #gameOverScreen, #pauseScreen { font-size: 4.2vw; }
-            #homeScreen h1, #homeScreen h2 { font-size: 4.8vw; }
-            #homeScreen .powerup-guide { font-size: 3.2vw; }
-            #gameOverScreen p { font-size: 3.8vw; }
-            button { font-size: 3.8vw; padding: 16px 42px; }
-            #pauseButton { font-size: 3.6vw; width: 80px; height: 45px; }
-            input { width: 300px; font-size: 3.6vw; height: 34px; }
-            #leaderboard th, #leaderboard td, #leaderboardGameOver th, #leaderboardGameOver td { font-size: 2.8vw; }
-            .control-button { width: 10vw; height: 10vw; font-size: 3.5vw; }
-            #gameContainer { height: 80vh; }
-            #score { top: 2.5vh; }
-            #stage { top: 7vh; }
-        }
-        @media screen and (max-width: 400px) {
-            #score, #stage, #homeScreen, #gameOverScreen, #pauseScreen { font-size: 5.4vw; }
-            #homeScreen h1, #homeScreen h2 { font-size: 6vw; }
-            #homeScreen .powerup-guide { font-size: 4vw; }
-            #gameOverScreen p { font-size: 4.8vw; }
-            button { font-size: 4.8vw; padding: 20px 48px; }
-            input { width: 280px; font-size: 4.8vw; height: 38px; }
-            #leaderboard th, #leaderboard td, #leaderboardGameOver th, #leaderboardGameOver td { font-size: 3.2vw; }
-            .control-button { width: 8vw; height: 8vw; font-size: 3vw; }
-            #score { top: 3.5vh; }
-            #stage { top: 9vh; }
+        @media (max-width: 600px) {
+            #gameCanvas {
+                max-width: 100%;
+            }
+            #touchControls {
+                display: flex;
+            }
+            #homeScreen, #gameOverScreen, #congratsScreen, #passwordScreen {
+                max-width: 95%;
+                padding: 10px;
+            }
         }
     </style>
 </head>
 <body>
     <div id="homeScreen">
-        <h1>Platformer Adventure</h1>
+        <h1>Pixel Platformer</h1>
+        <p>Collect all coins to unlock the portal and win to see your ranking! Avoid the ground and spikes to not reset!</p>
+        <p><strong>Controls:</strong> A/Left or D/Right: Move | W/Space: Jump (Double Jump) | S: Downward Dash</p>
+        <p><strong>On Mobile:</strong> Use on-screen buttons for movement, jump, and dash.</p>
+        <p><strong>Power-Ups:</strong></p>
+        <p><span style="color: #00FF00;">Invincibility (Green Hexagon)</span>: Avoid spikes for 6 seconds.</p>
+        <p><span style="color: #00B7EB;">Speed Boost (Blue Star)</span>: Double speed for 6 seconds.</p>
+        <p><span style="color: #FFD700;">Time Reduction (Yellow Clock)</span>: Subtract 2 seconds from timer.</p>
+        <div id="leaderboard"></div>
         <button id="startButton">Start Game</button>
-        <div class="leaderboard-container">
-            <div id="leaderboard"></div>
+        <button id="clearLeaderboardButton">Clear Leaderboard</button>
+    </div>
+    <div id="gameScreen" class="hidden">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="ui">
+            <div id="timer">Time: 0.00s</div>
+            <div id="stage">Stage: 1/1</div>
+            <button id="quitButton">Quit Game</button>
         </div>
-        <div class="powerup-guide">
-            <h2>Power-Ups Guide</h2>
-            <p>⚡ <strong>Speed</strong>: Increases movement speed by 30% for 3 seconds.</p>
-            <p>🛡️ <strong>Invincibility</strong>: Makes you immune to spikes for 3 seconds.</p>
-            <p>⏰ <strong>Time</strong>: Reduces your game time by 5 seconds.</p>
-            <p>🦘 <strong>Double Jump</strong>: Grants an extra jump (3 jumps total) for 3 seconds.</p>
+        <div id="touchControls" class="hidden">
+            <div class="touch-button-group">
+                <div class="touch-button" id="leftButton">◄</div>
+                <div class="touch-button" id="rightButton">►</div>
+            </div>
+            <div class="touch-button-group">
+                <div class="touch-button" id="jumpButton">▲</div>
+                <div class="touch-button" id="dashButton">▼</div>
+            </div>
         </div>
     </div>
-    <div id="score">Time: 0.00s</div>
-    <div id="stage">Stage: 1/5</div>
-    <div id="gameContainer">
-        <div id="background"></div>
+    <div id="congratsScreen" class="hidden">
+        <h1>Congratulations!</h1>
+        <p id="congratsTime">Final Time: 0.00s</p>
+        <p>Enter your name for the leaderboard (Top 5):</p>
+        <input type="text" id="nameInput" maxlength="20" placeholder="Your Name" autofocus>
+        <br>
+        <button id="submitNameButton">Submit</button>
+        <div id="leaderboard"></div>
     </div>
-    <div id="gameOverScreen">
-        <div class="content-section">
-            <p id="placement"></p>
-        </div>
-        <div class="content-section">
-            <p id="namePrompt" style="display: none;">Enter your name:</p>
-            <input id="playerName" type="text" maxlength="10" style="display: none;">
-            <button id="submitScore" style="display: none;">Submit</button>
-        </div>
-        <div class="content-section">
-            <button id="restartCheckpoint" style="display: none;">Restart from Checkpoint</button>
-            <button id="restartGame">Back to Home</button>
-        </div>
-        <div class="leaderboard-container">
-            <div id="leaderboardGameOver"></div>
-        </div>
+    <div id="passwordScreen" class="hidden">
+        <h1>Clear Leaderboard</h1>
+        <p>Enter password to clear leaderboard:</p>
+        <input type="password" id="passwordInput" maxlength="20" placeholder="Password" autofocus>
+        <br>
+        <button id="submitPasswordButton">Submit</button>
     </div>
-    <div id="pauseScreen">
-        <h1>Paused</h1>
-        <button id="resumeButton">Resume</button>
+    <div id="gameOverScreen" class="hidden">
+        <h1 id="gameOverTitle">You Win!</h1>
+        <p id="finalTime">Final Time: 0.00s</p>
+        <p id="rankingMessage"></p>
+        <button id="playAgainButton">Play Again</button>
+        <div id="leaderboard"></div>
     </div>
-    <div id="controls">
-        <div id="leftButton" class="control-button">←</div>
-        <div id="rightButton" class="control-button">→</div>
-        <div id="jumpButton" class="control-button">↑</div>
-    </div>
-    <button id="pauseButton" style="display: none;">Pause</button>
-    <audio id="bgMusic1" loop>
-        <source src="https://cdn.pixabay.com/download/audio/2023/03/15/audio_4e8b2e1f4e.mp3" type="audio/mp3">
-    </audio>
-    <audio id="bgMusic2" loop>
-        <source src="https://cdn.pixabay.com/download/audio/2023/03/15/audio_5f9c2e2f5f.mp3" type="audio/mp3">
-    </audio>
-    <audio id="bgMusic3" loop>
-        <source src="https://cdn.pixabay.com/download/audio/2023/03/15/audio_6a0d3f3a6a.mp3" type="audio/mp3">
-    </audio>
-    <audio id="coinSound">
-        <source src="https://cdn.pixabay.com/download/audio/2022/03/10/audio_7b7c2f3b7b.mp3" type="audio/mp3">
-    </audio>
-    <audio id="jumpSound">
-        <source src="https://cdn.pixabay.com/download/audio/2022/03/10/audio_8c8d3f6c8.mp3" type="audio/mp3">
-    </audio>
-    <audio id="powerUpSound">
-        <source src="https://cdn.pixabay.com/download/audio/2022/03/10/audio_9d9e4h5d9d.mp3" type="audio/mp3">
-    </audio>
-    <audio id="portalSound">
-        <source src="https://cdn.pixabay.com/download/audio/2022/03/10/audio_0a0f5i6e0a.mp3" type="audio/mp3">
-    </audio>
     <script>
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-            return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-            if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-                try {
-                    var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                    var firstSheetName = workbook.SheetNames[0];
-                    var worksheet = workbook.Sheets[firstSheetName];
-                    var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                    var filteredData = jsonData.filter(row => row.some(filledCell));
-                    var headerRowIndex = filteredData.findIndex((row, index) =>
-                        row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                    );
-                    if (headerRowIndex === -1 || headerRowIndex > 25) {
-                        headerRowIndex = 0;
-                    }
-                    var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
-                    csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                    return csv;
-                } catch (e) {
-                    console.error(e);
-                    return "";
-                }
-            }
-            return gk_fileData[filename] || "";
-        }
-        const gameContainer = document.getElementById('gameContainer');
-        const scoreDisplay = document.getElementById('score');
-        const stageDisplay = document.getElementById('stage');
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
         const homeScreen = document.getElementById('homeScreen');
+        const gameScreen = document.getElementById('gameScreen');
         const gameOverScreen = document.getElementById('gameOverScreen');
-        const pauseScreen = document.getElementById('pauseScreen');
+        const congratsScreen = document.getElementById('congratsScreen');
+        const passwordScreen = document.getElementById('passwordScreen');
         const startButton = document.getElementById('startButton');
-        const submitScoreButton = document.getElementById('submitScore');
-        const playerNameInput = document.getElementById('playerName');
-        const placementDisplay = document.getElementById('placement');
-        const leaderboardDisplay = document.getElementById('leaderboard');
-        const leaderboardGameOverDisplay = document.getElementById('leaderboardGameOver');
+        const clearLeaderboardButton = document.getElementById('clearLeaderboardButton');
+        const quitButton = document.getElementById('quitButton');
+        const timerDisplay = document.getElementById('timer');
+        const stageDisplay = document.getElementById('stage');
+        const finalTimeDisplay = document.getElementById('finalTime');
+        const congratsTimeDisplay = document.getElementById('congratsTime');
+        const rankingMessage = document.getElementById('rankingMessage');
+        const playAgainButton = document.getElementById('playAgainButton');
+        const gameOverTitle = document.getElementById('gameOverTitle');
+        const nameInput = document.getElementById('nameInput');
+        const submitNameButton = document.getElementById('submitNameButton');
+        const passwordInput = document.getElementById('passwordInput');
+        const submitPasswordButton = document.getElementById('submitPasswordButton');
         const leftButton = document.getElementById('leftButton');
         const rightButton = document.getElementById('rightButton');
         const jumpButton = document.getElementById('jumpButton');
-        const restartCheckpointButton = document.getElementById('restartCheckpoint');
-        const restartGameButton = document.getElementById('restartGame');
-        const pauseButton = document.getElementById('pauseButton');
-        const resumeButton = document.getElementById('resumeButton');
-        const namePrompt = document.getElementById('namePrompt');
-        const bgMusic = [
-            document.getElementById('bgMusic1'),
-            document.getElementById('bgMusic2'),
-            document.getElementById('bgMusic3')
-        ];
-        const coinSound = document.getElementById('coinSound');
-        const jumpSound = document.getElementById('jumpSound');
-        const powerUpSound = document.getElementById('powerUpSound');
-        const portalSound = document.getElementById('portalSound');
-        if (!localStorage.getItem('leaderboard')) {
-            localStorage.setItem('leaderboard', JSON.stringify([]));
-        }
+        const dashButton = document.getElementById('dashButton');
+        const touchControls = document.getElementById('touchControls');
+
         const player = {
-            x: 50,
-            y: 500,
-            baseWidth: 40,
-            baseHeight: 40,
-            width: 40,
-            height: 40,
-            baseSpeed: 5,
-            speed: 5,
-            velocityY: 0,
-            jumpPower: -15,
-            gravity: 0.6,
-            isJumping: false,
-            jumpCount: 0,
-            maxJumps: 2,
-            frame: 0,
-            frameCounter: 0,
-            speedBoostActive: false,
-            speedBoostTimer: 0,
-            invincibilityActive: false,
-            invincibilityTimer: 0,
-            doubleJumpActive: false,
-            doubleJumpTimer: 0,
-            element: null
+            x: 50, y: 510, width: 40, height: 40, baseSpeed: 6, speed: 6,
+            velocityY: 0, jumpPower: -11, gravity: 0.65, isJumping: false,
+            jumpCount: 0, maxJumps: 2,
+            invincibilityActive: false, invincibilityTimer: 0,
+            speedBoostActive: false, speedBoostTimer: 0,
+            dashTimer: 0, dashCooldown: 1,
+            frame: 0, frameCounter: 0
         };
+
+        const keys = { left: false, right: false, jump: false, down: false };
+        let gameTimer = 0;
+        let currentStage = 0;
+        let backgroundOffset = 0;
+        let clouds = [];
         let coinParticles = [];
         let portalParticles = [];
-        let powerUpParticles = [];
+        let animationFrame = 0;
+        let lastTime = null;
+        let isGameRunning = false;
+        let justReset = false;
+        let hasWon = false;
+        let powerUpSpawnTimer = 0;
+
+        const stages = [{
+            platforms: [
+                { x: 0, y: 550, width: 200, height: 50 },
+                { x: 300, y: 400, width: 200, height: 50 },
+                { x: 600, y: 350, width: 200, height: 50 }
+            ],
+            coins: [
+                { x: 100, y: 500, width: 16, height: 16, collected: false },
+                { x: 350, y: 350, width: 16, height: 16, collected: false },
+                { x: 650, y: 300, width: 16, height: 16, collected: false }
+            ],
+            staticObstacles: [
+                { x: 250, y: 400, width: 50, height: 50 }
+            ],
+            powerUps: [],
+            portal: { x: 700, y: 200, width: 50, height: 50, active: false }
+        }];
+
+        for (let i = 0; i < 8; i++) {
+            clouds.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * (canvas.height / 2),
+                size: Math.random() * 20 + 10,
+                speed: Math.random() * 0.5 + 0.2
+            });
+        }
+
+        function resizeCanvas() {
+            const maxWidth = window.innerWidth * 0.95;
+            const maxHeight = window.innerHeight * 0.7;
+            const scale = Math.min(maxWidth / 800, maxHeight / 600);
+            canvas.width = 800;
+            canvas.height = 600;
+            canvas.style.width = `${800 * scale}px`;
+            canvas.style.height = `${600 * scale}px`;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function checkCollision(rect1, rect2) {
+            const collision = rect1.x < rect2.x + rect2.width &&
+                             rect1.x + rect1.width > rect2.x &&
+                             rect1.y < rect2.y + rect2.height &&
+                             rect1.y + rect1.height > rect2.y;
+            if (collision && rect2.collected === false && !rect2.type) {
+                console.log(`Coin collected at x: ${rect2.x}, y: ${rect2.y}`);
+            }
+            return collision;
+        }
+
         function createCoinParticles(x, y) {
-            for (let i = 0; i < 15; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'coin-particle';
-                const radius = Math.random() * 4 + 2;
-                particle.style.width = `${radius}px`;
-                particle.style.height = `${radius}px`;
-                particle.style.left = `${x}px`;
-                particle.style.top = `${y}px`;
-                particle.vx = (Math.random() - 0.5) * 6;
-                particle.vy = (Math.random() - 0.5) * 6;
-                particle.life = 40;
-                particle.alpha = 1;
-                particle.radius = radius;
-                gameContainer.appendChild(particle);
-                coinParticles.push(particle);
-            }
-        }
-        function createPortalParticles(x, y) {
-            for (let i = 0; i < 5; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'portal-particle';
-                const radius = Math.random() * 4 + 2;
-                particle.style.width = `${radius}px`;
-                particle.style.height = `${radius}px`;
-                particle.style.left = `${x}px`;
-                particle.style.top = `${y}px`;
-                particle.vx = (Math.random() - 0.5) * 4;
-                particle.vy = (Math.random() - 0.5) * 4;
-                particle.life = 80;
-                particle.alpha = 1;
-                particle.radius = radius;
-                gameContainer.appendChild(particle);
-                portalParticles.push(particle);
-            }
-        }
-        function createPowerUpParticles(x, y, color) {
             for (let i = 0; i < 10; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'powerup-particle';
-                const radius = Math.random() * 3 + 2;
-                particle.style.width = `${radius}px`;
-                particle.style.height = `${radius}px`;
-                particle.style.left = `${x}px`;
-                particle.style.top = `${y}px`;
-                particle.style.background = `radial-gradient(circle, ${color}, rgba(255,255,255,0))`;
-                particle.vx = (Math.random() - 0.5) * 5;
-                particle.vy = (Math.random() - 0.5) * 5;
-                particle.life = 30;
-                particle.alpha = 1;
-                particle.radius = radius;
-                gameContainer.appendChild(particle);
-                powerUpParticles.push(particle);
-            }
-        }
-        let clouds = [
-            { x: 100, y: 50, size: 50, speed: 0.5, parts: [], element: null },
-            { x: 400, y: 80, size: 60, speed: 0.3, parts: [], element: null },
-            { x: 700, y: 60, size: 40, speed: 0.4, parts: [], element: null }
-        ];
-        const powerUpTypes = [
-            {
-                type: 'speed',
-                color: '#4682B4',
-                outlineColor: '#00FFFF',
-                icon: '⚡',
-                effect: () => {
-                    player.speedBoostActive = true;
-                    player.speedBoostTimer = 180;
-                    player.speed = player.baseSpeed * 1.3;
-                    powerUpSound.play();
-                    updatePlayer();
-                }
-            },
-            {
-                type: 'invincibility',
-                color: '#2E8B57',
-                outlineColor: '#00FF00',
-                icon: '🛡️',
-                effect: () => {
-                    player.invincibilityActive = true;
-                    player.invincibilityTimer = 180;
-                    powerUpSound.play();
-                    updatePlayer();
-                }
-            },
-            {
-                type: 'time',
-                color: '#6A5ACD',
-                outlineColor: '#FF00FF',
-                icon: '⏰',
-                effect: () => {
-                    gameTime = Math.max(0, gameTime - 5000);
-                    scoreDisplay.textContent = `Time: ${(gameTime / 1000).toFixed(2)}s`;
-                    powerUpSound.play();
-                }
-            },
-            {
-                type: 'doubleJump',
-                color: '#FF4500',
-                outlineColor: '#FFA500',
-                icon: '🦘',
-                effect: () => {
-                    player.doubleJumpActive = true;
-                    player.doubleJumpTimer = 180;
-                    player.maxJumps = 3;
-                    powerUpSound.play();
-                    updatePlayer();
-                }
-            }
-        ];
-        const stages = [
-            {
-                platforms: [
-                    { x: 0, y: 550, width: 200, height: 50, element: null },
-                    { x: 300, y: 450, width: 200, height: 50, element: null },
-                    { x: 500, y: 350, width: 200, height: 50, element: null }
-                ],
-                coins: [
-                    { x: 400, y: 400, radius: 10, collected: false, element: null },
-                    { x: 600, y: 300, radius: 10, collected: false, element: null },
-                    { x: 150, y: 500, radius: 10, collected: false, element: null }
-                ],
-                staticObstacles: [
-                    { x: 280, y: 430, width: 30, height: 30, element: null }
-                ],
-                powerUps: [],
-                portal: { x: 650, y: 290, width: 60, height: 60, active: false, element: null }
-            },
-            {
-                platforms: [
-                    { x: 0, y: 550, width: 180, height: 50, element: null },
-                    { x: 250, y: 450, width: 180, height: 50, element: null },
-                    { x: 450, y: 350, width: 180, height: 50, element: null }
-                ],
-                coins: [
-                    { x: 350, y: 400, radius: 10, collected: false, element: null },
-                    { x: 550, y: 300, radius: 10, collected: false, element: null },
-                    { x: 150, y: 500, radius: 10, collected: false, element: null }
-                ],
-                staticObstacles: [
-                    { x: 230, y: 430, width: 30, height: 30, element: null },
-                    { x: 400, y: 330, width: 30, height: 30, element: null }
-                ],
-                powerUps: [],
-                portal: { x: 550, y: 290, width: 60, height: 60, active: false, element: null }
-            },
-            {
-                platforms: [
-                    { x: 0, y: 550, width: 160, height: 50, element: null },
-                    { x: 200, y: 450, width: 160, height: 50, element: null },
-                    { x: 400, y: 350, width: 160, height: 50, element: null },
-                    { x: 600, y: 300, width: 160, height: 50, element: null }
-                ],
-                coins: [
-                    { x: 300, y: 400, radius: 10, collected: false, element: null },
-                    { x: 500, y: 300, radius: 10, collected: false, element: null },
-                    { x: 700, y: 250, radius: 10, collected: false, element: null }
-                ],
-                staticObstacles: [
-                    { x: 180, y: 430, width: 30, height: 30, element: null },
-                    { x: 360, y: 330, width: 30, height: 30, element: null },
-                    { x: 560, y: 280, width: 30, height: 30, element: null }
-                ],
-                powerUps: [],
-                portal: { x: 700, y: 240, width: 60, height: 60, active: false, element: null },
-                isCheckpoint: true
-            },
-            {
-                platforms: [
-                    { x: 0, y: 550, width: 150, height: 50, element: null },
-                    { x: 200, y: 480, width: 150, height: 50, element: null },
-                    { x: 350, y: 400, width: 150, height: 50, element: null },
-                    { x: 500, y: 320, width: 150, height: 50, element: null },
-                    { x: 650, y: 260, width: 150, height: 50, element: null }
-                ],
-                coins: [
-                    { x: 100, y: 500, radius: 10, collected: false, element: null },
-                    { x: 300, y: 430, radius: 10, collected: false, element: null },
-                    { x: 450, y: 350, radius: 10, collected: false, element: null },
-                    { x: 600, y: 270, radius: 10, collected: false, element: null }
-                ],
-                staticObstacles: [
-                    { x: 180, y: 460, width: 30, height: 30, element: null },
-                    { x: 330, y: 380, width: 30, height: 30, element: null },
-                    { x: 480, y: 300, width: 30, height: 30, element: null }
-                ],
-                powerUps: [],
-                portal: { x: 700, y: 200, width: 60, height: 60, active: false, element: null }
-            },
-            {
-                platforms: [
-                    { x: 0, y: 550, width: 140, height: 50, element: null },
-                    { x: 160, y: 490, width: 140, height: 50, element: null },
-                    { x: 320, y: 430, width: 140, height: 50, element: null },
-                    { x: 480, y: 370, width: 140, height: 50, element: null },
-                    { x: 640, y: 310, width: 140, height: 50, element: null },
-                    { x: 720, y: 240, width: 80, height: 50, element: null }
-                ],
-                coins: [
-                    { x: 80, y: 500, radius: 10, collected: false, element: null },
-                    { x: 240, y: 440, radius: 10, collected: false, element: null },
-                    { x: 400, y: 380, radius: 10, collected: false, element: null },
-                    { x: 560, y: 320, radius: 10, collected: false, element: null },
-                    { x: 680, y: 260, radius: 10, collected: false, element: null }
-                ],
-                staticObstacles: [
-                    { x: 140, y: 470, width: 30, height: 30, element: null },
-                    { x: 300, y: 410, width: 30, height: 30, element: null },
-                    { x: 460, y: 350, width: 30, height: 30, element: null },
-                    { x: 620, y: 290, width: 30, height: 30, element: null }
-                ],
-                powerUps: [],
-                portal: { x: 720, y: 180, width: 60, height: 60, active: false, element: null },
-                isCheckpoint: true
-            }
-        ];
-        let currentStage = 0;
-        let gameTime = 0;
-        let keys = { left: false, right: false, jump: false };
-        let powerUpSpawnTimer = null;
-        let gameState = 'home';
-        let startTime = 0;
-        let checkpointReached = false;
-        let checkpointTime = 0;
-        let scaleFactor = 1;
-        let currentMusic = null;
-        let pauseStartTime = 0;
-        let totalPausedTime = 0;
-        let wasPortalActive = false;
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        function resizeGame() {
-            const aspectRatio = 800 / 600;
-            let maxWidth = window.innerWidth * 0.7;
-            let maxHeight = window.innerHeight * 0.7;
-            let width = maxWidth;
-            let height = width / aspectRatio;
-            if (height > maxHeight) {
-                height = maxHeight;
-                width = height * aspectRatio;
-            }
-            gameContainer.style.width = `${width}px`;
-            gameContainer.style.height = `${height}px`;
-            scaleFactor = width / 800;
-            player.width = player.baseWidth * scaleFactor;
-            player.height = player.baseHeight * scaleFactor;
-            updatePositions();
-        }
-        window.addEventListener('resize', resizeGame);
-        resizeGame();
-        function initGameElements() {
-            gameContainer.innerHTML = '<div id="background"></div>';
-            const ground1 = document.createElement('div');
-            ground1.className = 'ground-layer';
-            ground1.style.height = '100px';
-            ground1.style.bottom = '0';
-            gameContainer.appendChild(ground1);
-            const ground2 = document.createElement('div');
-            ground2.className = 'ground-layer front';
-            ground2.style.height = '50px';
-            ground2.style.bottom = '0';
-            gameContainer.appendChild(ground2);
-            clouds.forEach(cloud => {
-                cloud.element = document.createElement('div');
-                cloud.element.className = 'cloud-container';
-                cloud.parts = [
-                    { offsetX: 0, offsetY: 0, size: cloud.size },
-                    { offsetX: cloud.size * 0.6, offsetY: cloud.size * -0.2, size: cloud.size * 0.7 },
-                    { offsetX: cloud.size * -0.6, offsetY: cloud.size * -0.2, size: cloud.size * 0.7 }
-                ];
-                cloud.parts.forEach(part => {
-                    const partElement = document.createElement('div');
-                    partElement.className = 'cloud-part';
-                    cloud.element.appendChild(partElement);
-                    part.element = partElement;
+                coinParticles.push({
+                    x: x, y: y,
+                    radius: Math.random() * 4 + 2,
+                    vx: Math.random() * 6 - 3,
+                    vy: Math.random() * -5 - 2,
+                    life: 1,
+                    color: ['#FFD700', '#FFA500', '#FFFFFF'][Math.floor(Math.random() * 3)]
                 });
-                gameContainer.appendChild(cloud.element);
-            });
-            player.element = document.createElement('div');
-            player.element.className = 'player';
-            player.element.innerHTML = `
-                <div class="helmet">
-                    <div class="visor"></div>
-                </div>
-                <div class="suit"></div>
-                <div class="arm-left"></div>
-                <div class="arm-right"></div>
-                <div class="leg-left"></div>
-                <div class="leg-right"></div>
-                <div class="thruster-left"></div>
-                <div class="thruster-right"></div>
-            `;
-            gameContainer.appendChild(player.element);
-            const stage = stages[currentStage];
-            stage.platforms.forEach(platform => {
-                platform.element = document.createElement('div');
-                platform.element.className = 'platform';
-                gameContainer.appendChild(platform.element);
-            });
-            stage.coins.forEach(coin => {
-                coin.element = document.createElement('div');
-                coin.element.className = 'coin';
-                gameContainer.appendChild(coin.element);
-            });
-            stage.staticObstacles.forEach(obstacle => {
-                obstacle.element = document.createElement('div');
-                obstacle.element.className = 'obstacle';
-                obstacle.element.innerHTML = `
-                    <div class="crystal"></div>
-                    <div class="crystal"></div>
-                    <div class="crystal"></div>
-                    <div class="crystal"></div>
-                    <div class="crystal"></div>
-                `;
-                gameContainer.appendChild(obstacle.element);
-            });
-            stage.powerUps.forEach(powerUp => {
-                powerUp.element = document.createElement('div');
-                powerUp.element.className = 'powerUp';
-                powerUp.element.textContent = powerUp.icon;
-                gameContainer.appendChild(powerUp.element);
-            });
-            stage.portal.element = document.createElement('div');
-            stage.portal.element.className = 'portal';
-            stage.portal.element.innerHTML = `
-                <div class="particle1"></div>
-                <div class="particle2"></div>
-                <div class="particle3"></div>
-                <div class="lock-icon">🔒</div>
-            `;
-            gameContainer.appendChild(stage.portal.element);
+            }
         }
-        function updatePositions() {
-            const stage = stages[currentStage];
-            clouds.forEach(cloud => {
-                if (cloud.element) {
-                    cloud.element.style.left = `${cloud.x * scaleFactor}px`;
-                    cloud.element.style.top = `${cloud.y * scaleFactor}px`;
-                    cloud.parts.forEach(part => {
-                        if (part.element) {
-                            part.element.style.width = `${part.size * scaleFactor}px`;
-                            part.element.style.height = `${part.size * 0.7 * scaleFactor}px`;
-                            part.element.style.left = `${part.offsetX * scaleFactor}px`;
-                            part.element.style.top = `${part.offsetY * scaleFactor}px`;
-                        }
-                    });
-                }
-            });
-            if (player.element) {
-                player.element.style.width = `${player.width}px`;
-                player.element.style.height = `${player.height}px`;
-                player.element.style.left = `${player.x * scaleFactor}px`;
-                player.element.style.top = `${player.y * scaleFactor}px`;
+
+        function createPortalParticles(x, y) {
+            for (let i = 0; i < 6; i++) {
+                portalParticles.push({
+                    x: x, y: y,
+                    radius: Math.random() * 3 + 1,
+                    vx: Math.random() * 3 - 1.5,
+                    vy: Math.random() * 3 - 1.5,
+                    life: 1,
+                    color: ['#800080', '#FFD700', '#FF00FF'][Math.floor(Math.random() * 3)]
+                });
             }
-            stage.platforms.forEach(platform => {
-                if (platform.element) {
-                    platform.element.style.width = `${platform.width * scaleFactor}px`;
-                    platform.element.style.height = `${platform.height * scaleFactor}px`;
-                    platform.element.style.left = `${platform.x * scaleFactor}px`;
-                    platform.element.style.top = `${platform.y * scaleFactor}px`;
-                }
-            });
-            stage.coins.forEach(coin => {
-                if (!coin.collected && coin.element) {
-                    coin.element.style.width = `${coin.radius * 2 * scaleFactor}px`;
-                    coin.element.style.height = `${coin.radius * 2 * scaleFactor}px`;
-                    coin.element.style.left = `${(coin.x - coin.radius) * scaleFactor}px`;
-                    coin.element.style.top = `${(coin.y - coin.radius) * scaleFactor}px`;
-                    coin.element.style.display = 'block';
-                } else if (coin.element) {
-                    coin.element.style.display = 'none';
-                }
-            });
-            stage.staticObstacles.forEach(obstacle => {
-                if (obstacle.element) {
-                    obstacle.element.style.width = `${obstacle.width * scaleFactor}px`;
-                    obstacle.element.style.height = `${obstacle.height * scaleFactor}px`;
-                    obstacle.element.style.left = `${obstacle.x * scaleFactor}px`;
-                    obstacle.element.style.top = `${obstacle.y * scaleFactor}px`;
-                    const crystals = obstacle.element.querySelectorAll('.crystal');
-                    crystals.forEach((crystal, index) => {
-                        const sizes = [
-                            { width: 10, height: 18, left: 4, top: 0 },
-                            { width: 10, height: 15, left: 2, top: 2 },
-                            { width: 10, height: 15, left: 8, top: 2 },
-                            { width: 10, height: 12, left: 6, top: 8 },
-                            { width: 10, height: 12, left: 14, top: 8 }
-                        ];
-                        crystal.style.width = `${sizes[index].width * scaleFactor}px`;
-                        crystal.style.height = `${sizes[index].height * scaleFactor}px`;
-                        crystal.style.left = `${sizes[index].left * scaleFactor}px`;
-                        crystal.style.top = `${sizes[index].top * scaleFactor}px`;
-                    });
-                }
-            });
-            stage.powerUps.forEach(powerUp => {
-                if (powerUp.element) {
-                    powerUp.element.style.width = `${powerUp.width * scaleFactor}px`;
-                    powerUp.element.style.height = `${powerUp.height * scaleFactor}px`;
-                    powerUp.element.style.left = `${powerUp.x * scaleFactor}px`;
-                    powerUp.element.style.top = `${powerUp.y * scaleFactor}px`;
-                    powerUp.element.style.background = powerUp.color;
-                    powerUp.element.style.borderColor = powerUp.outlineColor;
-                    powerUp.element.style.fontSize = `${12 * scaleFactor}px`;
-                }
-            });
-            if (stage.portal.element) {
-                stage.portal.element.style.width = `${stage.portal.width * scaleFactor}px`;
-                stage.portal.element.style.height = `${stage.portal.height * scaleFactor}px`;
-                stage.portal.element.style.left = `${stage.portal.x * scaleFactor}px`;
-                stage.portal.element.style.top = `${stage.portal.y * scaleFactor}px`;
-                stage.portal.element.classList.toggle('active', stage.portal.active);
-                stage.portal.element.classList.toggle('locked', !stage.portal.active);
-                const lockIcon = stage.portal.element.querySelector('.lock-icon');
-                lockIcon.style.display = stage.portal.active ? 'none' : 'block';
-            }
-            coinParticles.forEach(p => {
-                if (p) {
-                    p.style.left = `${p.x * scaleFactor}px`;
-                    p.style.top = `${p.y * scaleFactor}px`;
-                    p.style.width = `${p.radius * scaleFactor}px`;
-                    p.style.height = `${p.radius * scaleFactor}px`;
-                    p.style.opacity = p.alpha;
-                }
-            });
-            portalParticles.forEach(p => {
-                if (p) {
-                    p.style.left = `${p.x * scaleFactor}px`;
-                    p.style.top = `${p.y * scaleFactor}px`;
-                    p.style.width = `${p.radius * scaleFactor}px`;
-                    p.style.height = `${p.radius * scaleFactor}px`;
-                    p.style.opacity = p.alpha;
-                }
-            });
-            powerUpParticles.forEach(p => {
-                if (p) {
-                    p.style.left = `${p.x * scaleFactor}px`;
-                    p.style.top = `${p.y * scaleFactor}px`;
-                    p.style.width = `${p.radius * scaleFactor}px`;
-                    p.style.height = `${p.radius * scaleFactor}px`;
-                    p.style.opacity = p.alpha;
-                }
-            });
         }
-        function updatePlayer() {
-            if (!player.element) return;
-            if (player.speedBoostActive || player.invincibilityActive || player.doubleJumpActive) {
-                const glowColor = player.speedBoostActive ? 'rgba(0,0,255,0.6)' :
-                                  player.invincibilityActive ? 'rgba(0,255,0,0.6)' :
-                                  'rgba(255,165,0,0.6)';
-                player.element.style.boxShadow = `0 0 ${40 * scaleFactor}px ${glowColor}`;
-            } else {
-                player.element.style.boxShadow = `0 0 ${20 * scaleFactor}px rgba(0,191,255,0.3)`;
-            }
-            const helmet = player.element.querySelector('.helmet');
-            const visor = player.element.querySelector('.visor');
-            const suit = player.element.querySelector('.suit');
-            const armLeft = player.element.querySelector('.arm-left');
-            const armRight = player.element.querySelector('.arm-right');
-            const legLeft = player.element.querySelector('.leg-left');
-            const legRight = player.element.querySelector('.leg-right');
-            const thrusterLeft = player.element.querySelector('.thruster-left');
-            const thrusterRight = player.element.querySelector('.thruster-right');
-            helmet.style.width = `${30 * scaleFactor}px`; // 75% of base 40
-            helmet.style.height = `${30 * scaleFactor}px`;
-            helmet.style.left = `${5 * scaleFactor}px`; // Centered
-            visor.style.width = `${20 * scaleFactor}px`; // 50% of base 40
-            visor.style.height = `${12 * scaleFactor}px`;
-            visor.style.left = `${10 * scaleFactor}px`;
-            visor.style.top = `${8 * scaleFactor}px`;
-            suit.style.width = `${28 * scaleFactor}px`; // 70% of base 40
-            suit.style.height = `${28 * scaleFactor}px`;
-            suit.style.left = `${6 * scaleFactor}px`;
-            suit.style.top = `${22 * scaleFactor}px`;
-            armLeft.style.width = `${10 * scaleFactor}px`; // 25% of base 40
-            armLeft.style.height = `${16 * scaleFactor}px`;
-            armLeft.style.left = `${-2 * scaleFactor}px`;
-            armLeft.style.top = `${22 * scaleFactor}px`;
-            armRight.style.width = `${10 * scaleFactor}px`;
-            armRight.style.height = `${16 * scaleFactor}px`;
-            armRight.style.right = `${-2 * scaleFactor}px`;
-            armRight.style.top = `${22 * scaleFactor}px`;
-            legLeft.style.width = `${10 * scaleFactor}px`;
-            legLeft.style.height = `${14 * scaleFactor}px`;
-            legLeft.style.left = `${8 * scaleFactor}px`;
-            legLeft.style.bottom = `${0}px`;
-            legRight.style.width = `${10 * scaleFactor}px`;
-            legRight.style.height = `${14 * scaleFactor}px`;
-            legRight.style.right = `${8 * scaleFactor}px`;
-            legRight.style.bottom = `${0}px`;
-            thrusterLeft.style.width = `${8 * scaleFactor}px`; // 20% of base 40
-            thrusterLeft.style.height = `${12 * scaleFactor}px`;
-            thrusterLeft.style.left = `${8 * scaleFactor}px`;
-            thrusterLeft.style.bottom = `${-12 * scaleFactor}px`;
-            thrusterRight.style.width = `${8 * scaleFactor}px`;
-            thrusterRight.style.height = `${12 * scaleFactor}px`;
-            thrusterRight.style.right = `${8 * scaleFactor}px`;
-            thrusterRight.style.bottom = `${-12 * scaleFactor}px`;
-            thrusterLeft.classList.toggle('active', player.isJumping || player.velocityY < 0);
-            thrusterRight.classList.toggle('active', player.isJumping || player.velocityY < 0);
-            if (player.frameCounter % 10 === 0) {
-                player.frame = (player.frame + 1) % 2;
-                if (keys.left || keys.right) {
-                    legLeft.style.transform = `rotate(${player.frame === 0 ? 10 : -10}deg)`;
-                    legRight.style.transform = `rotate(${player.frame === 0 ? -10 : 10}deg)`;
-                    armLeft.style.transform = `rotate(${player.frame === 0 ? -10 : 10}deg)`;
-                    armRight.style.transform = `rotate(${player.frame === 0 ? 10 : -10}deg)`;
+
+        function generateRandomPowerUpPosition(platforms, existingPowerUps, staticObstacles) {
+            const minDistance = 50;
+            const hazardDistance = 60;
+            const spike = staticObstacles[0];
+            const spawnTypes = ['platform', 'mid-air', 'hazard'];
+            const spawnWeights = [0.3, 0.5, 0.2];
+            let spawnType = spawnTypes[Math.random() < spawnWeights[0] ? 0 : Math.random() < spawnWeights[1] / (spawnWeights[1] + spawnWeights[2]) ? 1 : 2];
+            let x, y, isValid;
+
+            do {
+                isValid = true;
+                if (spawnType === 'platform') {
+                    const platform = platforms[Math.floor(Math.random() * platforms.length)];
+                    x = platform.x + 10 + Math.random() * (platform.width - 30);
+                    y = platform.y - 20;
+                } else if (spawnType === 'mid-air') {
+                    const platform = platforms[Math.floor(Math.random() * platforms.length)];
+                    x = Math.random() < 0.5 ? 
+                        (Math.random() < 0.5 ? 20 + Math.random() * 10 : 750 + Math.random() * 20) :
+                        platform.x + 10 + Math.random() * (platform.width - 30);
+                    y = Math.random() < 0.3 ? 50 + Math.random() * 50 :
+                        platform.y - 50 - Math.random() * 50;
                 } else {
-                    legLeft.style.transform = 'rotate(0deg)';
-                    legRight.style.transform = 'rotate(0deg)';
-                    armLeft.style.transform = 'rotate(0deg)';
-                    armRight.style.transform = 'rotate(0deg)';
+                    x = spike.x + (Math.random() > 0.5 ? 1 : -1) * (hazardDistance + Math.random() * 50);
+                    y = spike.y - 20 - Math.random() * 50;
                 }
-            }
-            player.frameCounter++;
+                y = Math.max(50, y);
+                for (let powerUp of existingPowerUps) {
+                    const dx = x - powerUp.x;
+                    const dy = y - powerUp.y;
+                    if (Math.sqrt(dx * dx + dy * dy) < minDistance) {
+                        isValid = false;
+                        break;
+                    }
+                }
+                const dxSpike = x - spike.x;
+                const dySpike = y - spike.y;
+                if (spawnType !== 'hazard' && Math.sqrt(dxSpike * dxSpike + dySpike * dySpike) < hazardDistance) {
+                    isValid = false;
+                }
+                if (x < 20 || x > canvas.width - 20 || y > canvas.height - 20) {
+                    isValid = false;
+                }
+            } while (!isValid);
+            return { x, y, spawnType };
         }
-        function handleTouchStart(e, key) {
-            e.preventDefault();
-            keys[key] = true;
+
+        function spawnNewPowerUp() {
+            const platforms = stages[currentStage].platforms;
+            const staticObstacles = stages[currentStage].staticObstacles;
+            const powerUpTypes = [
+                { type: 'invincibility', color: '#008000', outlineColor: '#00FF00' },
+                { type: 'speedBoost', color: '#00B7EB', outlineColor: '#00FFFF' },
+                { type: 'timeReduction', color: '#FFD700', outlineColor: '#FFFFE0' }
+            ];
+            const availableTypes = powerUpTypes.filter(pt => !stages[currentStage].powerUps.some(pu => pu.type === pt.type));
+            if (availableTypes.length === 0) return;
+            const type = availableTypes[Math.floor(Math.random() * availableTypes.length)];
+            const { x, y, spawnType } = generateRandomPowerUpPosition(platforms, stages[currentStage].powerUps, staticObstacles);
+            stages[currentStage].powerUps.push({
+                x: x, y: y, width: 20, height: 20,
+                type: type.type, color: type.color, outlineColor: type.outlineColor
+            });
+            console.log(`Dynamic Power-Up Spawned: ${type.type} at x: ${x.toFixed(2)}, y: ${y.toFixed(2)}, type: ${spawnType}`);
         }
-        function handleTouchEnd(e, key) {
-            e.preventDefault();
-            keys[key] = false;
-        }
-        leftButton.addEventListener('touchstart', (e) => handleTouchStart(e, 'left'));
-        leftButton.addEventListener('touchend', (e) => handleTouchEnd(e, 'left'));
-        rightButton.addEventListener('touchstart', (e) => handleTouchStart(e, 'right'));
-        rightButton.addEventListener('touchend', (e) => handleTouchEnd(e, 'right'));
-        jumpButton.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (gameState === 'playing' && player.jumpCount < player.maxJumps) {
-                keys.jump = true;
-                player.velocityY = player.jumpPower;
-                player.isJumping = true;
-                player.jumpCount++;
-                jumpSound.play();
-            }
-        });
-        jumpButton.addEventListener('touchend', (e) => handleTouchEnd(e, 'jump'));
-        function pauseGame() {
-            if (gameState === 'playing') {
-                gameState = 'paused';
-                pauseScreen.style.display = 'flex';
-                pauseStartTime = performance.now();
-                pauseButton.textContent = 'Resume';
-                stopBackgroundMusic();
-            }
-        }
-        function resumeGame() {
-            if (gameState === 'paused') {
-                gameState = 'playing';
-                pauseScreen.style.display = 'none';
-                totalPausedTime += performance.now() - pauseStartTime;
-                pauseButton.textContent = 'Pause';
-                playBackgroundMusic();
-                requestAnimationFrame(gameLoop);
-            }
-        }
-        pauseButton.addEventListener('click', () => {
-            if (gameState === 'playing') pauseGame();
-            else if (gameState === 'paused') resumeGame();
-        });
-        resumeButton.addEventListener('click', resumeGame);
-        document.addEventListener('keydown', (e) => {
-            if (gameState !== 'playing') return;
-            if (e.code === 'ArrowLeft') keys.left = true;
-            if (e.code === 'ArrowRight') keys.right = true;
-            if (e.code === 'Space' && player.jumpCount < player.maxJumps) {
-                e.preventDefault();
-                keys.jump = true;
-                player.velocityY = player.jumpPower;
-                player.isJumping = true;
-                player.jumpCount++;
-                jumpSound.play();
-            }
-            if (e.code === 'Escape') {
-                if (gameState === 'playing') pauseGame();
-                else if (gameState === 'paused') resumeGame();
-            }
-        });
-        document.addEventListener('keyup', (e) => {
-            if (e.code === 'ArrowLeft') keys.left = false;
-            if (e.code === 'ArrowRight') keys.right = false;
-            if (e.code === 'Space') keys.jump = false;
-        });
-        function getLeaderboard() {
-            const leaderboard = JSON.parse(localStorage.getItem('Leaderboard') || '[]');
-            return leaderboard.sort((a, b) => a.time - b.time).slice(0, 10);
-        }
-        function addToLeaderboard(name, time) {
-            const leaderboard = getLeaderboard();
-            leaderboard.push({ name: name || 'Anonymous', time: time });
-            leaderboard.sort((a, b) => a.time);
-            localStorage.setItem('leaderboard', JSON.stringify(leaderboard.slice(0, 10)));
-        }
-        function getPlacement(time) {
-            const leaderboard = getLeaderboard();
-            return leaderboard.filter((entry => entry.time < time).length + 1);
-        }
-        function updateLeaderboardDisplay() {
-            const leaderboard = getLeaderboard();
-            const leaderboardHTML = `
-                <h2>Leaderboard</h2>
-                <table>
-                    <tr><th>Rank</th><th>Name</th><th>Time</th></tr>
-                    ${leaderboard.map((entry, index) => `
-                        <tr>
-                            <td>${index + 1}</td>
-                            <td>${entry.name}</td>
-                            <td>${(entry.time / 1000).toFixed(2)}s</td>
-                        </tr>
-                    `).join('')}
-                </table>
-            `;
-            leaderboardDisplay.innerHTML = leaderboardHTML;
-            leaderboardGameOverDisplay.innerHTML = leaderboardHTML;
-        }
-        function playBackgroundMusic() {
-            if (currentMusic) {
-                currentMusic.pause();
-                currentMusic.currentTime = 0;
-            }
-            currentMusic = bgMusic[Math.min(currentStage, bgMusic.length - 1)];
-            currentMusic.play().catch(e => console.log("Music playback failed:", e));
-        }
-        function stopBackgroundMusic() {
-            if (currentMusic) {
-                currentMusic.pause();
-                currentMusic.currentTime = 0;
-            }
-        }
-        function resetGame(startFromCheckpoint = false) {
-            stopBackgroundMusic();
-            if (startFromCheckpoint && checkpointReached) {
-                currentStage = stages.findIndex(stage => stage.isCheckpoint);
-                gameTime = checkpointTime;
-                scoreDisplay.textContent = `Time: ${(gameTime / 1000).toFixed(2)}s`;
-            } else {
-                currentStage = 0;
-                checkpointReached = false;
-                checkpointTime = 0;
-                gameTime = 0;
-                startTime = performance.now();
-                totalPausedTime = 0;
-                scoreDisplay.textContent = 'Time: 0.00s';
-            }
+
+        function resetStage() {
+            stages[currentStage].coins.forEach(coin => coin.collected = false);
+            const platforms = stages[currentStage].platforms;
+            const staticObstacles = stages[currentStage].staticObstacles;
+            const powerUpTypes = [
+                { type: 'invincibility', color: '#008000', outlineColor: '#00FF00' },
+                { type: 'speedBoost', color: '#00B7EB', outlineColor: '#00FFFF' },
+                { type: 'timeReduction', color: '#FFD700', outlineColor: '#FFFFE0' }
+            ];
+            stages[currentStage].powerUps = [];
+            powerUpTypes.forEach(type => {
+                const { x, y, spawnType } = generateRandomPowerUpPosition(platforms, stages[currentStage].powerUps, staticObstacles);
+                stages[currentStage].powerUps.push({
+                    x: x, y: y, width: 20, height: 20,
+                    type: type.type, color: type.color, outlineColor: type.outlineColor
+                });
+                console.log(`Power-Up Spawned: ${type.type} at x: ${x.toFixed(2)}, y: ${y.toFixed(2)}, type: ${spawnType}`);
+            });
+            stages[currentStage].portal.active = false;
             player.x = 50;
-            player.y = 500;
+            player.y = 510;
             player.velocityY = 0;
             player.isJumping = false;
             player.jumpCount = 0;
-            player.maxJumps = 2;
-            player.speed = player.baseSpeed;
-            player.speedBoostActive = false;
-            player.speedBoostTimer = 0;
             player.invincibilityActive = false;
             player.invincibilityTimer = 0;
-            player.doubleJumpActive = false;
-            player.doubleJumpTimer = 0;
-            stageDisplay.textContent = `Stage: ${currentStage + 1}/5`;
-            stages.forEach(stage => {
-                stage.coins.forEach(coin => {
-                    coin.collected = false;
-                    if (coin.element) coin.element.style.display = 'block';
-                });
-                stage.powerUps.forEach(powerUp => {
-                    if (powerUp.element) powerUp.element.remove();
-                });
-                stage.powerUps = [];
-                stage.portal.active = false;
+            player.speedBoostActive = false;
+            player.speedBoostTimer = 0;
+            player.dashTimer = 0;
+            player.speed = player.baseSpeed;
+            player.frame = 0;
+            player.frameCounter = 0;
+            backgroundOffset = 0;
+            powerUpSpawnTimer = 0;
+            stageDisplay.textContent = `Stage: 1/1`;
+            console.log('Stage reset: powerUps:', stages[currentStage].powerUps);
+        }
+
+        function resetGame() {
+            console.log('Resetting game');
+            player.x = 50;
+            player.y = 510;
+            player.velocityY = 0;
+            player.isJumping = false;
+            player.jumpCount = 0;
+            player.invincibilityActive = false;
+            player.invincibilityTimer = 0;
+            player.speedBoostActive = false;
+            player.speedBoostTimer = 0;
+            player.dashTimer = 0;
+            player.speed = player.baseSpeed;
+            player.frame = 0;
+            player.frameCounter = 0;
+            gameTimer = 0;
+            lastTime = null;
+            currentStage = 0;
+            backgroundOffset = 0;
+            powerUpSpawnTimer = 0;
+            clouds.forEach(cloud => {
+                cloud.x = Math.random() * canvas.width;
+                cloud.y = Math.random() * (canvas.height / 2);
+                cloud.size = Math.random() * 20 + 10;
+                cloud.speed = Math.random() * 0.5 + 0.2;
             });
-            coinParticles.forEach(p => p.remove());
             coinParticles = [];
-            portalParticles.forEach(p => p.remove());
             portalParticles = [];
-            powerUpParticles.forEach(p => p.remove());
-            powerUpParticles = [];
-            if (powerUpSpawnTimer) {
-                clearTimeout(powerUpSpawnTimer);
-                powerUpSpawnTimer = null;
+            keys.left = false;
+            keys.right = false;
+            keys.jump = false;
+            keys.down = false;
+            justReset = true;
+            resetStage();
+            timerDisplay.textContent = `Time: 0.00s`;
+            isGameRunning = true;
+            touchControls.classList.remove('hidden');
+            console.log('Game reset: player.x:', player.x, 'player.y:', player.y, 'gameTimer:', gameTimer, 'keys:', keys, 'justReset:', justReset, 'isGameRunning:', isGameRunning);
+        }
+
+        function sanitizeInput(str) {
+            if (!str) return 'Unknown';
+            const div = document.createElement('div');
+            div.textContent = str.trim().slice(0, 20);
+            return div.textContent || 'Unknown';
+        }
+
+        function getLeaderboard() {
+            try {
+                let leaderboard = JSON.parse(localStorage.getItem('leaderboard')) || [];
+                if (!Array.isArray(leaderboard) || leaderboard.length !== 5) {
+                    leaderboard = [
+                        { name: 'N/A', time: Infinity },
+                        { name: 'N/A', time: Infinity },
+                        { name: 'N/A', time: Infinity },
+                        { name: 'N/A', time: Infinity },
+                        { name: 'N/A', time: Infinity }
+                    ];
+                } else {
+                    leaderboard = leaderboard.map(entry => ({
+                        name: typeof entry.name === 'string' ? entry.name : 'N/A',
+                        time: Number.isFinite(entry.time) && entry.time > 0 ? entry.time : Infinity
+                    }));
+                }
+                leaderboard = leaderboard
+                    .sort((a, b) => a.time - b.time)
+                    .slice(0, 5);
+                console.log('Leaderboard loaded:', leaderboard);
+                return leaderboard;
+            } catch (e) {
+                console.error('Failed to load leaderboard:', e);
+                return [
+                    { name: 'N/A', time: Infinity },
+                    { name: 'N/A', time: Infinity },
+                    { name: 'N/A', time: Infinity },
+                    { name: 'N/A', time: Infinity },
+                    { name: 'N/A', time: Infinity }
+                ];
             }
-            gameState = 'playing';
-            gameContainer.style.display = 'block';
-            pauseButton.style.display = 'flex';
-            homeScreen.style.display = 'none';
-            gameOverScreen.style.display = 'none';
-            pauseScreen.style.display = 'none';
-            scoreDisplay.style.display = 'block';
-            stageDisplay.style.display = 'block';
-            initGameElements();
-            updatePositions();
-            playBackgroundMusic();
-            requestAnimationFrame(gameLoop);
         }
-        function showHomeScreen() {
-            gameState = 'home';
-            stopBackgroundMusic();
-            gameContainer.style.display = 'none';
-            pauseButton.style.display = 'none';
-            homeScreen.style.display = 'flex';
-            gameOverScreen.style.display = 'none';
-            pauseScreen.style.display = 'none';
-            scoreDisplay.style.display = 'none';
-            stageDisplay.style.display = 'none';
-            updateLeaderboardDisplay();
+
+        function updateLeaderboard(name, scoreTime) {
+            try {
+                let leaderboard = getLeaderboard();
+                console.log(`Checking leaderboard qualification: length=${leaderboard.length}, scoreTime=${scoreTime.toFixed(2)}, worstTime=${leaderboard[4].time === Infinity ? 'Infinity' : leaderboard[4].time.toFixed(2)}`);
+                
+                if (!Number.isFinite(scoreTime) || scoreTime <= 0) {
+                    console.error('Invalid scoreTime:', scoreTime);
+                    return { leaderboard, rank: -1 };
+                }
+
+                if (scoreTime < leaderboard[4].time) {
+                    const playerName = sanitizeInput(name);
+                    const infinityIndex = leaderboard.findIndex(entry => entry.time === Infinity);
+                    if (infinityIndex !== -1) {
+                        leaderboard[infinityIndex] = { name: playerName, time: scoreTime };
+                    } else {
+                        leaderboard.push({ name: playerName, time: scoreTime });
+                        leaderboard.sort((a, b) => a.time - b.time);
+                        leaderboard = leaderboard.slice(0, 5);
+                    }
+                    try {
+                        localStorage.setItem('leaderboard', JSON.stringify(leaderboard));
+                    } catch (e) {
+                        console.error('Failed to save leaderboard to localStorage:', e);
+                    }
+                    const rank = leaderboard.findIndex(entry => Math.abs(entry.time - scoreTime) < 0.01) + 1;
+                    console.log(`Player entered name: ${playerName} for rank ${rank}`);
+                    console.log('Leaderboard updated:', leaderboard);
+                    return { leaderboard, rank };
+                }
+                console.log('Leaderboard unchanged:', leaderboard);
+                return { leaderboard, rank: -1 };
+            } catch (e) {
+                console.error('Failed to update leaderboard:', e);
+                return { leaderboard: getLeaderboard(), rank: -1 };
+            }
         }
-        function showGameOverScreen(isComplete = false) {
-            stopBackgroundMusic();
-            gameState = 'gameOver';
-            gameContainer.style.display = 'none';
-            pauseButton.style.display = 'none';
-            homeScreen.style.display = 'none';
-            gameOverScreen.style.display = 'flex';
-            pauseScreen.style.display = 'none';
-            scoreDisplay.style.display = 'block';
-            stageDisplay.style.display = 'block';
-            const finalTime = gameTime;
-            const placement = getPlacement(finalTime);
-            placementDisplay.textContent = isComplete
-                ? `Congratulations! You completed the game in ${(finalTime / 1000).toFixed(2)}s! Rank: ${placement}`
-                : `Game Over! Time: ${(finalTime / 1000).toFixed(2)}s`;
-            restartCheckpointButton.style.display = isComplete ? 'none' : (checkpointReached ? 'block' : 'none');
-            if (isComplete && placement <= 10) {
-                namePrompt.style.display = 'block';
-                playerNameInput.style.display = 'inline-block';
-                submitScoreButton.style.display = 'block';
+
+        function displayLeaderboard(element, playerTime = null) {
+            const leaderboard = getLeaderboard();
+            let html = '<h2>Leaderboard</h2><table><tr><th>Rank</th><th>Name</th><th>Time</th></tr>';
+            leaderboard.forEach((entry, index) => {
+                const isPlayerScore = playerTime !== null && Number.isFinite(entry.time) && Math.abs(entry.time - playerTime) < 0.01;
+                const className = isPlayerScore ? ' class="player-score"' : '';
+                const timeDisplay = entry.time === Infinity ? '--' : `${entry.time.toFixed(2)}s`;
+                html += `<tr${className}><td>${index + 1}</td><td>${sanitizeInput(entry.name)}</td><td>${timeDisplay}</td></tr>`;
+            });
+            html += '</table>';
+            element.innerHTML = html;
+            console.log('Leaderboard displayed:', leaderboard);
+        }
+
+        function showPasswordScreen() {
+            passwordInput.value = '';
+            showScreen(passwordScreen);
+            console.log('Showing password screen');
+        }
+
+        function clearLeaderboard() {
+            try {
+                const password = passwordInput.value;
+                if (password === '123456') {
+                    localStorage.removeItem('leaderboard');
+                    displayLeaderboard(document.getElementById('leaderboard'));
+                    showScreen(homeScreen);
+                    console.log('Leaderboard cleared successfully');
+                    alert('Leaderboard cleared!');
+                } else {
+                    console.log('Incorrect password entered');
+                    alert('Incorrect password.');
+                    passwordInput.value = '';
+                    passwordInput.focus();
+                }
+            } catch (e) {
+                console.error('Failed to clear leaderboard:', e);
+                alert('Error clearing leaderboard.');
+                passwordInput.value = '';
+                passwordInput.focus();
+            }
+        }
+
+        function showCongratsScreen(scoreTime) {
+            const displayTime = (Number.isFinite(scoreTime) ? scoreTime : 0).toFixed(2);
+            congratsTimeDisplay.textContent = `Final Time: ${displayTime}s`;
+            nameInput.value = '';
+            showScreen(congratsScreen);
+            displayLeaderboard(document.getElementById('leaderboard'), scoreTime);
+            nameInput.focus();
+            console.log('Showing congrats screen with final time:', displayTime);
+        }
+
+        function gameOver(completed = false) {
+            isGameRunning = false;
+            touchControls.classList.add('hidden');
+            if (ctx) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
             } else {
-                namePrompt.style.display = 'none';
-                playerNameInput.style.display = 'none';
-                submitScoreButton.style.display = 'none';
+                console.error('Canvas context is null');
             }
-            updateLeaderboardDisplay();
-        }
-        startButton.addEventListener('click', () => resetGame(false));
-        restartGameButton.addEventListener('click', () => showHomeScreen());
-        restartCheckpointButton.addEventListener('click', () => resetGame(true));
-        submitScoreButton.addEventListener('click', () => {
-            const name = playerNameInput.value.trim() || 'Anonymous';
-            addToLeaderboard(name, gameTime);
-            playerNameInput.value = '';
-            namePrompt.style.display = 'none';
-            playerNameInput.style.display = 'none';
-            submitScoreButton.style.display = 'none';
-            updateLeaderboardDisplay();
-        });
-        playerNameInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                submitScoreButton.click();
-            }
-        });
-        function spawnPowerUp() {
-            const stage = stages[currentStage];
-            const platform = stage.platforms[Math.floor(Math.random() * stage.platforms.length)];
-            const powerUpType = powerUpTypes[Math.floor(Math.random() * powerUpTypes.length)];
-            const powerUp = {
-                x: platform.x + platform.width / 2 - 10,
-                y: platform.y - 20,
-                width: 20,
-                height: 20,
-                ...powerUpType,
-                element: null
-            };
-            powerUp.element = document.createElement('div');
-            powerUp.element.className = 'powerUp';
-            powerUp.element.textContent = powerUp.icon;
-            gameContainer.appendChild(powerUp.element);
-            stage.powerUps.push(powerUp);
-            updatePositions();
-        }
-        function checkCollision(rect1, rect2) {
-            return rect1.x < rect2.x + rect2.width &&
-                   rect1.x + rect1.width > rect2.x &&
-                   rect1.y < rect2.y + rect2.height &&
-                   rect1.y + rect1.height > rect2.y;
-        }
-        function gameLoop() {
-            if (gameState !== 'playing') return;
-            gameTime = performance.now() - startTime - totalPausedTime;
-            scoreDisplay.textContent = `Time: ${(gameTime / 1000).toFixed(2)}s`;
-            if (keys.left) {
-                player.x -= player.speed;
-                player.element.style.transform = 'scaleX(-1)';
-            }
-            if (keys.right) {
-                player.x += player.speed;
-                player.element.style.transform = 'scaleX(1)';
-            }
-            player.x = Math.max(0, Math.min(player.x, 800 - player.width));
-            player.velocityY += player.gravity;
-            player.y += player.velocityY;
-            const stage = stages[currentStage];
-            let onPlatform = false;
-            for (const platform of stage.platforms) {
-                if (checkCollision(player, {
-                    x: platform.x,
-                    y: platform.y,
-                    width: platform.width,
-                    height: platform.height
-                }) && player.velocityY >= 0 && player.y + player.height - player.velocityY <= platform.y) {
-                    player.y = platform.y - player.height;
-                    player.velocityY = 0;
-                    player.isJumping = false;
-                    player.jumpCount = 0;
-                    onPlatform = true;
-                }
-            }
-            if (player.y >= 600) {
-                showGameOverScreen(false);
-                return;
-            }
-            if (!onPlatform && !player.isJumping && player.velocityY === 0) {
-                player.isJumping = true;
-                player.jumpCount = 1;
-            }
-            for (const coin of stage.coins) {
-                if (!coin.collected && checkCollision(player, {
-                    x: coin.x - coin.radius,
-                    y: coin.y - coin.radius,
-                    width: coin.radius * 2,
-                    height: coin.radius * 2
-                })) {
-                    coin.collected = true;
-                    coin.element.style.display = 'none';
-                    createCoinParticles(coin.x, coin.y);
-                    coinSound.play();
-                }
-            }
-            const isPortalActive = stage.coins.every(coin => coin.collected);
-            if (!wasPortalActive && isPortalActive) {
-                portalSound.play();
-                createPortalParticles(stage.portal.x + stage.portal.width / 2, stage.portal.y + stage.portal.height / 2);
-            }
-            stage.portal.active = isPortalActive;
-            wasPortalActive = isPortalActive;
-            if (stage.portal.active && checkCollision(player, stage.portal)) {
-                portalSound.play();
-                createPortalParticles(stage.portal.x + stage.portal.width / 2, stage.portal.y + stage.portal.height / 2);
-                if (stage.isCheckpoint) {
-                    checkpointReached = true;
-                    checkpointTime = gameTime;
-                }
-                currentStage++;
-                if (currentStage >= stages.length) {
-                    showGameOverScreen(true);
-                    return;
-                }
-                stageDisplay.textContent = `Stage: ${currentStage + 1}/5`;
-                player.x = 50;
-                player.y = 500;
-                player.velocityY = 0;
-                player.isJumping = false;
-                player.jumpCount = 0;
-                initGameElements();
-                playBackgroundMusic();
-                updatePositions();
-                wasPortalActive = false;
-                requestAnimationFrame(gameLoop);
-                return;
-            }
-            if (!player.invincibilityActive) {
-                for (const obstacle of stage.staticObstacles) {
-                    if (checkCollision(player, obstacle)) {
-                        showGameOverScreen(false);
+            const scoreTime = Number.isFinite(gameTimer) ? gameTimer : 0;
+            const displayTime = scoreTime.toFixed(2);
+            finalTimeDisplay.textContent = `Final Time: ${displayTime}s`;
+            if (completed) {
+                hasWon = true;
+                gameOverTitle.textContent = 'You Win!';
+                try {
+                    const leaderboard = getLeaderboard();
+                    if (!leaderboard[4]) {
+                        console.error('Leaderboard is invalid:', leaderboard);
+                        throw new Error('Invalid leaderboard structure');
+                    }
+                    console.log(`Checking leaderboard qualification: length=${leaderboard.length}, scoreTime=${scoreTime.toFixed(2)}, worstTime=${leaderboard[4].time === Infinity ? 'Infinity' : leaderboard[4].time.toFixed(2)}`);
+                    if (!Number.isFinite(scoreTime) || scoreTime <= 0) {
+                        console.error('Invalid scoreTime in gameOver:', scoreTime);
+                        rankingMessage.textContent = 'Error: Invalid score time.';
+                        showScreen(gameOverScreen);
+                        displayLeaderboard(document.getElementById('leaderboard'), scoreTime);
                         return;
                     }
+                    if (scoreTime < leaderboard[4].time) {
+                        showCongratsScreen(scoreTime);
+                    } else {
+                        rankingMessage.textContent = 'Your time did not make the leaderboard.';
+                        showScreen(gameOverScreen);
+                        displayLeaderboard(document.getElementById('leaderboard'), scoreTime);
+                    }
+                    console.log('Game Over: Stage Completed, showing congrats or game over screen');
+                } catch (e) {
+                    console.error('Failed to process game over:', e);
+                    rankingMessage.textContent = 'Error processing score.';
+                    showScreen(gameOverScreen);
+                    displayLeaderboard(document.getElementById('leaderboard'), scoreTime);
+                }
+            } else {
+                gameOverTitle.textContent = 'You Fell!';
+                rankingMessage.textContent = 'Try again to reach the portal!';
+                console.log('Game Over: Fell off canvas or hit spike, showing game over screen');
+                showScreen(gameOverScreen);
+                displayLeaderboard(document.getElementById('leaderboard'), scoreTime);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            displayLeaderboard(document.getElementById('leaderboard'));
+            isGameRunning = false;
+            console.log('DOM loaded, initializing game');
+            startButton.addEventListener('click', () => {
+                console.log('Start Game clicked');
+                showScreen(gameScreen);
+                resetGame();
+            });
+            clearLeaderboardButton.addEventListener('click', () => {
+                console.log('Clear Leaderboard clicked');
+                showPasswordScreen();
+            });
+            submitPasswordButton.addEventListener('click', () => {
+                console.log('Submit Password clicked');
+                clearLeaderboard();
+            });
+            submitNameButton.addEventListener('click', () => {
+                console.log('Submit Name clicked');
+                const scoreTime = Number.isFinite(gameTimer) ? gameTimer : 0;
+                let playerName = sanitizeInput(nameInput.value);
+                if (!playerName || playerName === 'Unknown') {
+                    alert('Name input empty or invalid. Using default name.');
+                    playerName = 'Unknown';
+                }
+                try {
+                    const result = updateLeaderboard(playerName, scoreTime);
+                    rankingMessage.textContent = result.rank > 0 ? `Your time is ranked #${result.rank}!` : 'Error updating leaderboard.';
+                    showScreen(gameOverScreen);
+                    displayLeaderboard(document.getElementById('leaderboard'), scoreTime);
+                    console.log('Name submitted, transitioning to game over screen');
+                } catch (e) {
+                    console.error('Failed to process name submission:', e);
+                    rankingMessage.textContent = 'Error processing score.';
+                    showScreen(gameOverScreen);
+                    displayLeaderboard(document.getElementById('leaderboard'), scoreTime);
+                }
+            });
+            nameInput.addEventListener('input', () => {
+                console.log('Name input changed:', nameInput.value);
+            });
+            passwordInput.addEventListener('input', () => {
+                console.log('Password input changed');
+            });
+            requestAnimationFrame(gameLoop);
+        });
+
+        quitButton.addEventListener('click', () => {
+            console.log('Quit Game clicked');
+            isGameRunning = false;
+            touchControls.classList.add('hidden');
+            if (ctx) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+            showScreen(homeScreen);
+            resetGame();
+            displayLeaderboard(document.getElementById('leaderboard'));
+        });
+
+        playAgainButton.addEventListener('click', () => {
+            console.log('Play Again clicked, resetting game');
+            showScreen(gameScreen);
+            resetGame();
+        });
+
+        // Touch Controls
+        leftButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            keys.left = true;
+            keys.right = false;
+            console.log('Touch: leftButton pressed');
+        });
+        leftButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            keys.left = false;
+            console.log('Touch: leftButton released');
+        });
+        rightButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            keys.right = true;
+            keys.left = false;
+            console.log('Touch: rightButton pressed');
+        });
+        rightButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            keys.right = false;
+            console.log('Touch: rightButton released');
+        });
+        jumpButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (player.jumpCount < player.maxJumps && !keys.jump) {
+                player.velocityY = player.jumpPower;
+                player.isJumping = true;
+                player.jumpCount++;
+                console.log('Touch: jumpButton pressed, velocityY:', player.velocityY);
+            }
+            keys.jump = true;
+        });
+        jumpButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            keys.jump = false;
+            console.log('Touch: jumpButton released');
+        });
+        dashButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            keys.down = true;
+            console.log('Touch: dashButton pressed');
+        });
+        dashButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            keys.down = false;
+            console.log('Touch: dashButton released');
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (congratsScreen.classList.contains('hidden') && passwordScreen.classList.contains('hidden')) {
+                e.preventDefault();
+                if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+                    keys.left = true;
+                    keys.right = false;
+                    console.log('Key down: left');
+                }
+                if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+                    keys.right = true;
+                    keys.left = false;
+                    console.log('Key down: right');
+                }
+                if (e.code === 'Space' || e.code === 'KeyW') {
+                    if (player.jumpCount < player.maxJumps && !keys.jump) {
+                        player.velocityY = player.jumpPower;
+                        player.isJumping = true;
+                        player.jumpCount++;
+                        console.log('Key down: jump, velocityY:', player.velocityY);
+                    }
+                    keys.jump = true;
+                }
+                if (e.code === 'KeyS') {
+                    keys.down = true;
+                    console.log('Key down: down');
                 }
             }
-            for (let i = stage.powerUps.length - 1; i >= 0; i--) {
-                const powerUp = stage.powerUps[i];
-                if (checkCollision(player, {
-                    x: powerUp.x,
-                    y: powerUp.y,
-                    width: powerUp.width,
-                    height: powerUp.height
-                })) {
-                    powerUp.effect();
-                    createPowerUpParticles(powerUp.x + powerUp.width / 2, powerUp.y + powerUp.height / 2, powerUp.color);
-                    powerUp.element.remove();
-                    stage.powerUps.splice(i, 1);
+            if (e.code === 'Enter' && !congratsScreen.classList.contains('hidden')) {
+                console.log('Enter key pressed, triggering name submission');
+                submitNameButton.click();
+            }
+            if (e.code === 'Enter' && !passwordScreen.classList.contains('hidden')) {
+                console.log('Enter key pressed, triggering password submission');
+                submitPasswordButton.click();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            e.preventDefault();
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+                keys.left = false;
+                console.log('Key up: left');
+            }
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+                keys.right = false;
+                console.log('Key up: right');
+            }
+            if (e.code === 'Space' || e.code === 'KeyW') {
+                keys.jump = false;
+                console.log('Key up: jump');
+            }
+            if (e.code === 'KeyS') {
+                keys.down = false;
+                console.log('Key up: down');
+            }
+        });
+
+        function showScreen(screen) {
+            homeScreen.classList.add('hidden');
+            gameScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            congratsScreen.classList.add('hidden');
+            passwordScreen.classList.add('hidden');
+            screen.classList.remove('hidden');
+            touchControls.classList.add('hidden');
+            if (screen === gameScreen) {
+                touchControls.classList.remove('hidden');
+            }
+            console.log('Showing screen:', screen.id);
+            if (screen === congratsScreen) {
+                nameInput.focus();
+                console.log('Focused nameInput');
+            }
+            if (screen === passwordScreen) {
+                passwordInput.focus();
+                console.log('Focused passwordInput');
+            }
+        }
+
+        function update(deltaTime) {
+            if (!isGameRunning) return;
+
+            deltaTime = Math.min(deltaTime, 0.1);
+            gameTimer = Number.isFinite(gameTimer) ? gameTimer + deltaTime : 0;
+            timerDisplay.textContent = `Time: ${gameTimer.toFixed(2)}s`;
+            animationFrame++;
+            console.log('Update: gameTimer:', gameTimer, 'player.x:', player.x, 'player.y:', player.y, 'justReset:', justReset);
+
+            if (justReset) {
+                console.log('First update after reset, skipping death checks: player.x:', player.x, 'player.y:', player.y);
+                justReset = false;
+                return;
+            }
+
+            if (player.invincibilityActive) {
+                player.invincibilityTimer -= deltaTime;
+                if (player.invincibilityTimer <= 0) {
+                    player.invincibilityActive = false;
                 }
             }
-            if (player.speedBoostTimer > 0) {
-                player.speedBoostTimer--;
+            if (player.speedBoostActive) {
+                player.speedBoostTimer -= deltaTime;
                 if (player.speedBoostTimer <= 0) {
                     player.speedBoostActive = false;
                     player.speed = player.baseSpeed;
                 }
             }
-            if (player.invincibilityTimer > 0) {
-                player.invincibilityTimer--;
-                if (player.invincibilityTimer <= 0) {
-                    player.invincibilityActive = false;
+            if (player.dashTimer > 0) {
+                player.dashTimer -= deltaTime;
+            }
+
+            let moveX = 0;
+            if (keys.left) moveX -= player.speed;
+            if (keys.right) moveX += player.speed;
+            player.x += moveX;
+
+            let isOnPlatform = false;
+            if (keys.down && !isOnPlatform && player.dashTimer <= 0 && player.y < canvas.height - player.height) {
+                player.velocityY = 10;
+                player.dashTimer = player.dashCooldown;
+                console.log(`Downward Dash activated at x: ${player.x.toFixed(2)}, y: ${player.y.toFixed(2)}`);
+            }
+
+            player.velocityY += player.gravity;
+            player.y += player.velocityY;
+
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+            if (player.y < 0) {
+                player.y = 0;
+                player.velocityY = 0;
+            }
+
+            isOnPlatform = false;
+            for (let platform of stages[currentStage].platforms) {
+                if (player.x + player.width > platform.x &&
+                    player.x < platform.x + platform.width &&
+                    player.y + player.height > platform.y &&
+                    player.y + player.height < platform.y + platform.height + 5 &&
+                    player.velocityY >= 0) {
+                    player.y = platform.y - player.height;
+                    player.velocityY = 0;
+                    player.isJumping = false;
+                    player.jumpCount = 0;
+                    isOnPlatform = true;
                 }
             }
-            if (player.doubleJumpTimer > 0) {
-                player.doubleJumpTimer--;
-                if (player.doubleJumpTimer <= 0) {
-                    player.doubleJumpActive = false;
-                    player.maxJumps = 2;
-                }
+
+            if (!isOnPlatform && player.y + player.height >= canvas.height) {
+                console.log('Died at ground (y: 600)');
+                player.y = canvas.height - player.height;
+                gameOver(false);
+                return;
             }
-            updatePlayer();
+
+            player.frameCounter++;
+            if (player.frameCounter >= 5) {
+                player.frame = (player.frame + 1) % 4;
+                player.frameCounter = 0;
+            }
+
             clouds.forEach(cloud => {
-                cloud.x += cloud.speed;
-                if (cloud.x > 800 + cloud.size) {
-                    cloud.x = -cloud.size;
+                cloud.x -= cloud.speed;
+                if (cloud.x + cloud.size * 2 < 0) {
+                    cloud.x = canvas.width + cloud.size * 2;
+                    cloud.y = Math.random() * (canvas.height / 2);
+                    cloud.size = Math.random() * 20 + 10;
+                    cloud.speed = Math.random() * 0.5 + 0.2;
                 }
             });
-            coinParticles = coinParticles.filter(p => {
-                p.x += p.vx;
-                p.y += p.vy;
-                p.vy += 0.2;
-                p.life -= 1;
-                p.alpha = p.life / 40;
-                if (p.life <= 0) {
-                    p.remove();
-                    return false;
+
+            for (let i = stages[currentStage].coins.length - 1; i >= 0; i--) {
+                const coin = stages[currentStage].coins[i];
+                if (!coin.collected && checkCollision(player, coin)) {
+                    coin.collected = true;
+                    createCoinParticles(coin.x + coin.width / 2, coin.y + coin.height / 2);
                 }
-                return true;
-            });
-            portalParticles = portalParticles.filter(p => {
+            }
+
+            const allCoinsCollected = stages[currentStage].coins.every(coin => coin.collected);
+            stages[currentStage].portal.active = allCoinsCollected;
+
+            let powerUpCollected = false;
+            for (let i = stages[currentStage].powerUps.length - 1; i >= 0; i--) {
+                const powerUp = stages[currentStage].powerUps[i];
+                if (checkCollision(player, powerUp)) {
+                    if (powerUp.type === 'invincibility') {
+                        player.invincibilityActive = true;
+                        player.invincibilityTimer = 6;
+                        console.log('Power-Up: Invincibility activated at x:', powerUp.x, 'y:', powerUp.y);
+                    } else if (powerUp.type === 'speedBoost') {
+                        player.speedBoostActive = true;
+                        player.speedBoostTimer = 6;
+                        player.speed = player.baseSpeed * 2;
+                        console.log('Power-Up: Speed Boost activated at x:', powerUp.x, 'y:', powerUp.y);
+                    } else if (powerUp.type === 'timeReduction') {
+                        gameTimer = Math.max(0, gameTimer - 2);
+                        console.log('Power-Up: Time Reduction (-2s) at x:', powerUp.x, 'y:', powerUp.y);
+                    }
+                    stages[currentStage].powerUps.splice(i, 1);
+                    powerUpCollected = true;
+                }
+            }
+
+            if (powerUpCollected) {
+                powerUpSpawnTimer = 2;
+            }
+            if (powerUpSpawnTimer > 0) {
+                powerUpSpawnTimer -= deltaTime;
+                if (powerUpSpawnTimer <= 0 && stages[currentStage].powerUps.length < 3) {
+                    spawnNewPowerUp();
+                }
+            }
+
+            if (!player.invincibilityActive) {
+                for (let obstacle of stages[currentStage].staticObstacles) {
+                    if (checkCollision(player, obstacle)) {
+                        console.log('Died at spike (x: 250, y: 400)');
+                        player.x = obstacle.x;
+                        player.y = obstacle.y - player.height;
+                        gameOver(false);
+                        return;
+                    }
+                }
+            }
+
+            const portal = stages[currentStage].portal;
+            if (checkCollision(player, portal) && portal.active) {
+                currentStage++;
+                if (currentStage >= stages.length) {
+                    console.log('Game Over: Stage Completed, showing congrats screen');
+                    gameOver(true);
+                    return;
+                }
+                resetStage();
+            }
+
+            coinParticles = coinParticles.filter(p => p.life > 0);
+            coinParticles.forEach(p => {
                 p.x += p.vx;
                 p.y += p.vy;
                 p.vy += 0.1;
-                p.life -= 1;
-                p.alpha = p.life / 80;
-                if (p.life <= 0) {
-                    p.remove();
-                    return false;
-                }
-                return true;
+                p.life -= 0.02;
+                p.radius *= 0.98;
             });
-            powerUpParticles = powerUpParticles.filter(p => {
+
+            portalParticles = portalParticles.filter(p => p.life > 0);
+            portalParticles.forEach(p => {
                 p.x += p.vx;
                 p.y += p.vy;
-                p.vy += 0.1;
-                p.life -= 1;
-                p.alpha = p.life / 30;
-                if (p.life <= 0) {
-                    p.remove();
-                    return false;
-                }
-                return true;
+                p.life -= 0.02;
+                p.radius *= 0.98;
             });
-            updatePositions();
-            if (!powerUpSpawnTimer && Math.random() < 0.005) {
-                spawnPowerUp();
-                powerUpSpawnTimer = setTimeout(() => powerUpSpawnTimer = null, 10000);
+        }
+
+        function draw() {
+            if (!ctx) {
+                console.error('Canvas context is null');
+                return;
+            }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            console.log('Drawing canvas, isGameRunning:', isGameRunning);
+
+            if (!isGameRunning) return;
+
+            const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            skyGradient.addColorStop(0, '#4B0082');
+            skyGradient.addColorStop(1, '#87CEEB');
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#2F4F4F';
+            ctx.beginPath();
+            ctx.moveTo(-backgroundOffset, canvas.height);
+            for (let x = -backgroundOffset; x < canvas.width * 2; x += 100) {
+                ctx.lineTo(x + 50, canvas.height - 100 - Math.sin(x / 200) * 50);
+            }
+            ctx.lineTo(canvas.width * 2 - backgroundOffset, canvas.height);
+            ctx.fill();
+            ctx.fillStyle = '#4682B4';
+            ctx.beginPath();
+            ctx.moveTo(-backgroundOffset / 2, canvas.height);
+            for (let x = -backgroundOffset / 2; x < canvas.width * 2; x += 100) {
+                ctx.lineTo(x + 50, canvas.height - 50 - Math.sin(x / 300) * 30);
+            }
+            ctx.lineTo(canvas.width * 2 - backgroundOffset / 2, canvas.height);
+            ctx.fill();
+
+            clouds.forEach(cloud => {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.beginPath();
+                ctx.arc(cloud.x, cloud.y, cloud.size, 0, Math.PI * 2);
+                ctx.arc(cloud.x + cloud.size * 0.7, cloud.y, cloud.size * 1.2, 0, Math.PI * 2);
+                ctx.arc(cloud.x + cloud.size * 1.4, cloud.y, cloud.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            for (let platform of stages[currentStage].platforms) {
+                const woodGradient = ctx.createLinearGradient(platform.x, platform.y, platform.x, platform.y + platform.height);
+                woodGradient.addColorStop(0, '#4A3721');
+                woodGradient.addColorStop(0.5, '#5C4326');
+                woodGradient.addColorStop(1, '#3C2F1A');
+                ctx.fillStyle = woodGradient;
+                ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+                ctx.fillStyle = '#228B22';
+                ctx.fillRect(platform.x, platform.y - 5, platform.width, 5);
+                ctx.strokeStyle = '#1A3C1A';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(platform.x, platform.y - 5, platform.width, platform.height + 5);
+                ctx.beginPath();
+                for (let i = 10; i < platform.width - 10; i += 20) {
+                    ctx.moveTo(platform.x + i, platform.y);
+                    ctx.lineTo(platform.x + i + 10, platform.y + platform.height);
+                }
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+
+            for (let obstacle of stages[currentStage].staticObstacles) {
+                ctx.save();
+                ctx.translate(obstacle.x + obstacle.width / 2, obstacle.y + obstacle.height / 2);
+                const metalGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 25);
+                metalGradient.addColorStop(0, '#E0E0E0');
+                metalGradient.addColorStop(1, '#C0C0C0');
+                ctx.fillStyle = metalGradient;
+                ctx.strokeStyle = '#FF4040';
+                ctx.lineWidth = 1;
+                ctx.shadowBlur = 15 + Math.sin(animationFrame / 10) * 7;
+                ctx.shadowColor = '#FF4040';
+                for (let i = 0; i < 3; i++) {
+                    ctx.save();
+                    ctx.rotate((i * 120 * Math.PI) / 180 + animationFrame / 20);
+                    ctx.beginPath();
+                    ctx.moveTo(0, -10);
+                    ctx.lineTo(-5, 10);
+                    ctx.lineTo(5, 10);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.restore();
+                }
+                ctx.shadowBlur = 0;
+                ctx.restore();
+            }
+
+            for (let powerUp of stages[currentStage].powerUps) {
+                ctx.save();
+                const scale = 1 + Math.sin(animationFrame / 10) * 0.1;
+                ctx.translate(powerUp.x + powerUp.width / 2, powerUp.y + powerUp.height / 2);
+                ctx.scale(scale, scale);
+                ctx.translate(-powerUp.width / 2, -powerUp.height / 2);
+                ctx.fillStyle = powerUp.color;
+                ctx.strokeStyle = powerUp.outlineColor;
+                ctx.lineWidth = 2;
+                ctx.shadowBlur = 12 + Math.sin(animationFrame / 10) * 5;
+                ctx.shadowColor = powerUp.outlineColor;
+                ctx.beginPath();
+                if (powerUp.type === 'invincibility') {
+                    for (let i = 0; i < 6; i++) {
+                        const angle = (Math.PI * 2 * i) / 6;
+                        ctx.lineTo(10 + Math.cos(angle) * 9, 10 + Math.sin(angle) * 9);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.strokeStyle = '#000000';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(10, 1);
+                    ctx.lineTo(10, 19);
+                    ctx.moveTo(1, 10);
+                    ctx.lineTo(19, 10);
+                    ctx.stroke();
+                } else if (powerUp.type === 'speedBoost') {
+                    ctx.moveTo(10, 0);
+                    ctx.lineTo(12, 6);
+                    ctx.lineTo(18, 6);
+                    ctx.lineTo(14, 10);
+                    ctx.lineTo(16, 16);
+                    ctx.lineTo(10, 12);
+                    ctx.lineTo(4, 16);
+                    ctx.lineTo(6, 10);
+                    ctx.lineTo(2, 6);
+                    ctx.lineTo(8, 6);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                } else if (powerUp.type === 'timeReduction') {
+                    ctx.arc(10, 10, 9, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(10, 10);
+                    ctx.lineTo(10, 6);
+                    ctx.moveTo(10, 10);
+                    ctx.lineTo(14, 8);
+                    ctx.strokeStyle = '#000000';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+                ctx.shadowBlur = 0;
+                ctx.restore();
+            }
+
+            ctx.save();
+            if (keys.left) ctx.scale(-1, 1);
+            const renderX = keys.left ? -player.x - player.width : player.x;
+            const pulseScale = 1 + Math.sin(animationFrame / 15) * 0.05;
+            ctx.scale(pulseScale, pulseScale);
+            const scaledX = renderX / pulseScale;
+            const scaledY = player.y / pulseScale;
+            if (player.invincibilityActive) {
+                const glowGradient = ctx.createRadialGradient(
+                    scaledX + 20, scaledY + 20, 0,
+                    scaledX + 20, scaledY + 20, 30
+                );
+                glowGradient.addColorStop(0, 'rgba(0, 255, 0, 0.4)');
+                glowGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                ctx.fillStyle = glowGradient;
+                ctx.beginPath();
+                ctx.arc(scaledX + 20, scaledY + 20, 30, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            if (player.speedBoostActive) {
+                const glowGradient = ctx.createRadialGradient(
+                    scaledX + 20, scaledY + 20, 0,
+                    scaledX + 20, scaledY + 20, 30
+                );
+                glowGradient.addColorStop(0, 'rgba(0, 183, 235, 0.4)');
+                glowGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                ctx.fillStyle = glowGradient;
+                ctx.beginPath();
+                ctx.arc(scaledX + 20, scaledY + 20, 30, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.fillStyle = '#FFE4C4';
+            ctx.fillRect(scaledX + 10, scaledY + 10, 20, 20);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(scaledX + 10, scaledY + 15, 10, 3);
+            ctx.fillRect(scaledX + 3, scaledY + 20, 3, 10);
+            if (!player.isJumping) {
+                ctx.beginPath();
+                ctx.arc(scaledX + 20, scaledY + 20, 15, 0, Math.PI);
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+            ctx.fillStyle = '#4682B4';
+            ctx.fillRect(scaledX + 5, scaledY + 25, 30, 15);
+            ctx.fillStyle = '#FF0000';
+            if (player.frame === 0 || player.frame === 2 || player.isJumping) {
+                ctx.beginPath();
+                ctx.moveTo(scaledX + 5, scaledY + 25);
+                ctx.lineTo(scaledX + 10, scaledY + 30);
+                ctx.lineTo(scaledX + 15, scaledY + 40);
+                ctx.fill();
+            } else if (player.frame === 1 || player.frame === 3) {
+                ctx.beginPath();
+                ctx.moveTo(scaledX + 5, scaledY + 25);
+                ctx.lineTo(scaledX + 15, scaledY + 35);
+                ctx.lineTo(scaledX + 15, scaledY + 40);
+                ctx.fill();
+            }
+            ctx.fillStyle = '#228B22';
+            if (player.frame === 0 || player.frame === 2) {
+                ctx.fillRect(scaledX + 10, scaledY + 40, 10, 10);
+                ctx.fillRect(scaledX + 20, scaledY + 35, 10, 10);
+            } else if (player.frame === 1 || player.frame === 3) {
+                ctx.fillRect(scaledX + 10, scaledY + 35, 10, 10);
+                ctx.fillRect(scaledX + 20, scaledY + 40, 10, 10);
+            } else if (player.isJumping) {
+                ctx.fillRect(scaledX + 10, scaledY + 38, 10, 10);
+                ctx.fillRect(scaledX + 20, scaledY + 38, 10, 10);
+            }
+            ctx.fillStyle = '#FFE4C4';
+            if (player.frame === 0 || player.frame === 2 || player.isJumping) {
+                ctx.fillRect(scaledX + 30, scaledY + 25, 10, 5);
+                ctx.fillRect(scaledX + 0, scaledY + 30, 10, 5);
+            } else {
+                ctx.fillRect(scaledX + 30, scaledY + 30, 10, 5);
+                ctx.fillRect(scaledX + 0, scaledY + 25, 10, 5);
+            }
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+            ctx.shadowBlur = 5;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.beginPath();
+            ctx.ellipse(scaledX + 20, scaledY + player.height, 15, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.restore();
+
+            for (let coin of stages[currentStage].coins) {
+                if (!coin.collected) {
+                    ctx.save();
+                    ctx.translate(coin.x + coin.width / 2, coin.y + coin.height / 2);
+                    ctx.rotate(animationFrame / 20);
+                    const coinGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 8);
+                    coinGradient.addColorStop(0, '#FFFFE0');
+                    coinGradient.addColorStop(0.5, '#FFD700');
+                    coinGradient.addColorStop(1, '#FFA500');
+                    ctx.fillStyle = coinGradient;
+                    ctx.strokeStyle = '#FFFFFF';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 6, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 4, 0, Math.PI * 2);
+                    ctx.stroke();
+                    for (let i = 0; i < 4; i++) {
+                        ctx.beginPath();
+                        ctx.moveTo(0, 0);
+                        ctx.lineTo(8 * Math.cos((i * Math.PI) / 2), 8 * Math.sin((i * Math.PI) / 2));
+                        ctx.stroke();
+                    }
+                    ctx.restore();
+                }
+            }
+
+            ctx.fillStyle = 'rgba(0, 206, 209, 0.7)';
+            for (let p of coinParticles) {
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            const portal = stages[currentStage].portal;
+            if (portal.active) {
+                if (Math.random() < 0.3) {
+                    createPortalParticles(portal.x + 25, portal.y + 25);
+                }
+                const glowRadius = 35 + Math.sin(animationFrame / 10) * 5;
+                const glowGradient = ctx.createRadialGradient(
+                    portal.x + 25, portal.y + 25, 0,
+                    portal.x + 25, portal.y + 25, glowRadius
+                );
+                glowGradient.addColorStop(0, 'rgba(128, 0, 128, 0.9)');
+                glowGradient.addColorStop(1, 'rgba(128, 0, 128, 0)');
+                ctx.fillStyle = glowGradient;
+                ctx.beginPath();
+                ctx.arc(portal.x + 25, portal.y + 25, glowRadius, 0, Math.PI * 2);
+                ctx.fill();
+
+                const swirlGradient = ctx.createRadialGradient(
+                    portal.x + 25, portal.y + 25, 0,
+                    portal.x + 25, portal.y + 25, 25
+                );
+                swirlGradient.addColorStop(0, '#800080');
+                swirlGradient.addColorStop(0.3, '#FFD700');
+                swirlGradient.addColorStop(1, '#FF00FF');
+                ctx.fillStyle = swirlGradient;
+                ctx.save();
+                ctx.translate(portal.x + 25, portal.y + 25);
+                ctx.rotate(animationFrame / 20);
+                ctx.beginPath();
+                for (let i = 0; i < 12; i++) {
+                    const angle = (i / 12) * Math.PI * 2;
+                    ctx.lineTo(Math.cos(angle) * 25, Math.sin(angle) * 15);
+                    ctx.lineTo(Math.cos(angle + Math.PI / 12) * 15, Math.sin(angle + Math.PI / 12) * 25);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+
+                ctx.fillStyle = 'rgba(255, 215, 0, 0.5)';
+                for (let p of portalParticles) {
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            } else {
+                ctx.fillStyle = '#4A4A4A';
+                ctx.fillRect(portal.x, portal.y, portal.width, portal.height);
+                ctx.strokeStyle = '#FFD700';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(portal.x, portal.y, portal.width, portal.height);
+
+                const shakeOffset = Math.sin(animationFrame / 5) * 2;
+                const lockX = portal.x + 25 + shakeOffset;
+                const lockY = portal.y + 25;
+
+                const lockGradient = ctx.createLinearGradient(lockX - 15, lockY - 15, lockX + 15, lockY + 15);
+                lockGradient.addColorStop(0, '#FFD700');
+                lockGradient.addColorStop(1, '#FFA500');
+                ctx.fillStyle = lockGradient;
+                ctx.beginPath();
+                ctx.moveTo(lockX - 15, lockY + 5);
+                ctx.lineTo(lockX - 15, lockY - 5);
+                ctx.quadraticCurveTo(lockX - 15, lockY - 15, lockX - 5, lockY - 15);
+                ctx.lineTo(lockX + 5, lockY - 15);
+                ctx.quadraticCurveTo(lockX + 15, lockY - 15, lockX + 15, lockY - 5);
+                ctx.lineTo(lockX + 15, lockY + 5);
+                ctx.lineTo(lockX + 10, lockY + 15);
+                ctx.lineTo(lockX - 10, lockY + 15);
+                ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(lockX - 5, lockY - 15);
+                ctx.lineTo(lockX - 5, lockY - 25);
+                ctx.quadraticCurveTo(lockX, lockY - 30, lockX + 5, lockY - 25);
+                ctx.lineTo(lockX + 5, lockY - 15);
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = lockGradient;
+                ctx.stroke();
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(lockX, lockY + 5, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(lockX, lockY + 5);
+                ctx.lineTo(lockX - 3, lockY + 10);
+                ctx.lineTo(lockX + 3, lockY + 10);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+
+        function gameLoop(timestamp) {
+            if (!lastTime) {
+                lastTime = timestamp;
+            }
+            const deltaTime = (timestamp - lastTime) / 1000;
+            lastTime = timestamp;
+            console.log('Game loop running: timestamp:', timestamp, 'deltaTime:', deltaTime, 'isGameRunning:', isGameRunning);
+            try {
+                if (isGameRunning) {
+                    update(deltaTime);
+                    draw();
+                } else {
+                    draw();
+                }
+            } catch (e) {
+                console.error('Error in game loop:', e);
             }
             requestAnimationFrame(gameLoop);
         }
-        showHomeScreen();
     </script>
 </body>
 </html>
