@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
@@ -55,7 +16,7 @@
             height: 100vh;
             justify-content: center;
             overflow: hidden;
-            touch-action: manipulation;
+            touch-action: manipulation; /* Prevent double-tap zoom */
         }
         #homeScreen, #gameOverScreen, #congratsScreen, #passwordScreen {
             text-align: center;
@@ -65,7 +26,7 @@
             border-radius: 10px;
             max-width: 90%;
             margin: 10px;
-            font-size: clamp(12px, 3vw, 14px);
+            font-size: clamp(12px, 3vw, 14px); /* Responsive font size */
         }
         #homeScreen h1, #gameOverScreen h1, #congratsScreen h1, #passwordScreen h1 {
             font-size: clamp(24px, 5vw, 28px);
@@ -87,7 +48,7 @@
             width: 100%;
             max-width: 800px;
             height: auto;
-            aspect-ratio: 4 / 3;
+            aspect-ratio: 4 / 3; /* Maintain 800x600 ratio */
         }
         #ui {
             position: absolute;
@@ -117,7 +78,7 @@
             cursor: pointer;
             touch-action: manipulation;
             min-width: 60px;
-            min-height: 48px;
+            min-height: 48px; /* Accessible touch target */
         }
         button:hover, button:active {
             background: #FFD700;
@@ -232,7 +193,7 @@
 <body>
     <div id="homeScreen">
         <h1>Pixel Platformer</h1>
-        <p>Collect all coins to unlock the portal Validation of the artifact succeeded! and complete all 3 stages to win and see your ranking! Avoid the ground and spikes to not reset!</p>
+        <p>Collect all coins to unlock the portal and complete all 3 levels to see your ranking! Avoid the ground and spikes to not reset!</p>
         <p><strong>Controls:</strong> A/Left or D/Right: Move | W/Space: Jump (Double Jump) | S: Downward Dash</p>
         <p><strong>On Mobile:</strong> Use on-screen buttons for movement, jump, and dash.</p>
         <p><strong>Power-Ups:</strong></p>
@@ -337,7 +298,7 @@
         let powerUpSpawnTimer = 0;
 
         const stages = [
-            { // Stage 1: Introduction
+            {
                 platforms: [
                     { x: 0, y: 550, width: 200, height: 50 },
                     { x: 300, y: 400, width: 200, height: 50 },
@@ -354,41 +315,48 @@
                 powerUps: [],
                 portal: { x: 700, y: 200, width: 50, height: 50, active: false }
             },
-            { // Stage 2: Intermediate
+            {
                 platforms: [
                     { x: 0, y: 550, width: 150, height: 50 },
                     { x: 200, y: 450, width: 150, height: 50 },
                     { x: 400, y: 350, width: 150, height: 50 },
-                    { x: 600, y: 450, width: 200, height: 50 }
+                    { x: 600, y: 300, width: 200, height: 50 }
                 ],
                 coins: [
                     { x: 75, y: 500, width: 16, height: 16, collected: false },
-                    { x: 250, y: 300, width: 16, height: 16, collected: false },
-                    { x: 650, y: 400, width: 16, height: 16, collected: false }
+                    { x: 250, y: 400, width: 16, height: 16, collected: false },
+                    { x: 450, y: 300, width: 16, height: 16, collected: false },
+                    { x: 650, y: 250, width: 16, height: 16, collected: false }
                 ],
                 staticObstacles: [
-                    { x: 350, y: 350, width: 50, height: 50 }
+                    { x: 350, y: 350, width: 50, height: 50 },
+                    { x: 550, y: 300, width: 50, height: 50 }
                 ],
                 powerUps: [],
-                portal: { x: 700, y: 400, width: 50, height: 50, active: false }
+                portal: { x: 700, y: 150, width: 50, height: 50, active: false }
             },
-            { // Stage 3: Challenging
+            {
                 platforms: [
                     { x: 0, y: 550, width: 100, height: 50 },
-                    { x: 250, y: 400, width: 100, height: 50 },
-                    { x: 500, y: 300, width: 100, height: 50 },
-                    { x: 700, y: 250, width: 100, height: 50 }
+                    { x: 150, y: 500, width: 100, height: 50 },
+                    { x: 300, y: 400, width: 100, height: 50 },
+                    { x: 450, y: 350, width: 100, height: 50 },
+                    { x: 600, y: 300, width: 200, height: 50 }
                 ],
                 coins: [
                     { x: 50, y: 500, width: 16, height: 16, collected: false },
-                    { x: 300, y: 300, width: 16, height: 16, collected: false },
-                    { x: 550, y: 250, width: 16, height: 16, collected: false }
+                    { x: 200, y: 450, width: 16, height: 16, collected: false },
+                    { x: 350, y: 350, width: 16, height: 16, collected: false },
+                    { x: 500, y: 300, width: 16, height: 16, collected: false },
+                    { x: 650, y: 250, width: 16, height: 16, collected: false }
                 ],
                 staticObstacles: [
-                    { x: 300, y: 400, width: 50, height: 50 }
+                    { x: 250, y: 500, width: 50, height: 50 },
+                    { x: 400, y: 400, width: 50, height: 50 },
+                    { x: 550, y: 300, width: 50, height: 50 }
                 ],
                 powerUps: [],
-                portal: { x: 750, y: 200, width: 50, height: 50, active: false }
+                portal: { x: 700, y: 100, width: 50, height: 50, active: false }
             }
         ];
 
@@ -454,7 +422,6 @@
         function generateRandomPowerUpPosition(platforms, existingPowerUps, staticObstacles) {
             const minDistance = 50;
             const hazardDistance = 60;
-            const spike = staticObstacles[0];
             const spawnTypes = ['platform', 'mid-air', 'hazard'];
             const spawnWeights = [0.3, 0.5, 0.2];
             let spawnType = spawnTypes[Math.random() < spawnWeights[0] ? 0 : Math.random() < spawnWeights[1] / (spawnWeights[1] + spawnWeights[2]) ? 1 : 2];
@@ -474,6 +441,7 @@
                     y = Math.random() < 0.3 ? 50 + Math.random() * 50 :
                         platform.y - 50 - Math.random() * 50;
                 } else {
+                    const spike = staticObstacles[Math.floor(Math.random() * staticObstacles.length)];
                     x = spike.x + (Math.random() > 0.5 ? 1 : -1) * (hazardDistance + Math.random() * 50);
                     y = spike.y - 20 - Math.random() * 50;
                 }
@@ -486,10 +454,13 @@
                         break;
                     }
                 }
-                const dxSpike = x - spike.x;
-                const dySpike = y - spike.y;
-                if (spawnType !== 'hazard' && Math.sqrt(dxSpike * dxSpike + dySpike * dySpike) < hazardDistance) {
-                    isValid = false;
+                for (let spike of staticObstacles) {
+                    const dxSpike = x - spike.x;
+                    const dySpike = y - spike.y;
+                    if (spawnType !== 'hazard' && Math.sqrt(dxSpike * dxSpike + dySpike * dySpike) < hazardDistance) {
+                        isValid = false;
+                        break;
+                    }
                 }
                 if (x < 20 || x > canvas.width - 20 || y > canvas.height - 20) {
                     isValid = false;
@@ -551,8 +522,8 @@
             player.frameCounter = 0;
             backgroundOffset = 0;
             powerUpSpawnTimer = 0;
-            stageDisplay.textContent = `Stage: ${currentStage + 1}/3`;
-            console.log(`Stage ${currentStage + 1} reset: powerUps:`, stages[currentStage].powerUps);
+            stageDisplay.textContent = `Stage: ${currentStage + 1}/${stages.length}`;
+            console.log('Stage reset: powerUps:', stages[currentStage].powerUps);
         }
 
         function resetGame() {
@@ -592,7 +563,7 @@
             timerDisplay.textContent = `Time: 0.00s`;
             isGameRunning = true;
             touchControls.classList.remove('hidden');
-            console.log('Game reset: player.x:', player.x, 'player.y:', player.y, 'gameTimer:', gameTimer, 'currentStage:', currentStage, 'isGameRunning:', isGameRunning);
+            console.log('Game reset: player.x:', player.x, 'player.y:', player.y, 'gameTimer:', gameTimer, 'keys:', keys, 'justReset:', justReset, 'isGameRunning:', isGameRunning);
         }
 
         function sanitizeInput(str) {
@@ -688,6 +659,12 @@
             console.log('Leaderboard displayed:', leaderboard);
         }
 
+        function showPasswordScreen() {
+            passwordInput.value = '';
+            showScreen(passwordScreen);
+            console.log('Showing password screen');
+        }
+
         function clearLeaderboard() {
             try {
                 const password = passwordInput.value;
@@ -732,7 +709,7 @@
             const scoreTime = Number.isFinite(gameTimer) ? gameTimer : 0;
             const displayTime = scoreTime.toFixed(2);
             finalTimeDisplay.textContent = `Final Time: ${displayTime}s`;
-            if (completed) {
+            if (completed && currentStage >= stages.length) {
                 hasWon = true;
                 gameOverTitle.textContent = 'You Win!';
                 try {
@@ -818,12 +795,6 @@
             });
             requestAnimationFrame(gameLoop);
         });
-
-        function showPasswordScreen() {
-            passwordInput.value = '';
-            showScreen(passwordScreen);
-            console.log('Showing password screen');
-        }
 
         quitButton.addEventListener('click', () => {
             console.log('Quit Game clicked');
@@ -978,7 +949,7 @@
             gameTimer = Number.isFinite(gameTimer) ? gameTimer + deltaTime : 0;
             timerDisplay.textContent = `Time: ${gameTimer.toFixed(2)}s`;
             animationFrame++;
-            console.log('Update: gameTimer:', gameTimer, 'player.x:', player.x, 'player.y:', player.y, 'currentStage:', currentStage, 'justReset:', justReset);
+            console.log('Update: gameTimer:', gameTimer, 'player.x:', player.x, 'player.y:', player.y, 'justReset:', justReset);
 
             if (justReset) {
                 console.log('First update after reset, skipping death checks: player.x:', player.x, 'player.y:', player.y);
@@ -1109,7 +1080,7 @@
             if (!player.invincibilityActive) {
                 for (let obstacle of stages[currentStage].staticObstacles) {
                     if (checkCollision(player, obstacle)) {
-                        console.log(`Died at spike (x: ${obstacle.x}, y: ${obstacle.y})`);
+                        console.log('Died at spike (x:', obstacle.x, ', y:', obstacle.y, ')');
                         player.x = obstacle.x;
                         player.y = obstacle.y - player.height;
                         gameOver(false);
@@ -1127,7 +1098,6 @@
                     return;
                 }
                 resetStage();
-                console.log(`Advanced to Stage ${currentStage + 1}`);
             }
 
             coinParticles = coinParticles.filter(p => p.life > 0);
@@ -1504,12 +1474,9 @@
                 ctx.moveTo(lockX - 5, lockY - 15);
                 ctx.lineTo(lockX - 5, lockY - 25);
                 ctx.quadraticCurveTo(lockX, lockY - 30, lockX + 5, lockY - 25);
-                const lockGradient2 = ctx.createLinearGradient(lockX - 5, lockY - 25, lockX + 5, lockY - 15);
-                lockGradient2.addColorStop(0, '#FFD700');
-                lockGradient2.addColorStop(1, '#FFA500');
                 ctx.lineTo(lockX + 5, lockY - 15);
                 ctx.lineWidth = 4;
-                ctx.strokeStyle = lockGradient2;
+                ctx.strokeStyle = lockGradient;
                 ctx.stroke();
                 ctx.strokeStyle = '#000';
                 ctx.lineWidth = 1;
